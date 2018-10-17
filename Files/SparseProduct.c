@@ -259,7 +259,7 @@ void ProdSparseMatrixVectorByRows_OMP (SparseMatrix spr, int index, double *vec,
 */
 
 void ProdSparseMatrixVectorByRows_OMPTasks (SparseMatrix spr, int index, double *vec, double *res, int bm) {
-	int i, j, idx, dim = spr.dim1;
+	int i, j, dim = spr.dim1;
 	int *pp1 = spr.vptr, *pi1 = spr.vpos + *pp1 - index;
 	double aux, *pvec = vec + *pp1 - index;
 	double *pd1 = spr.vval + *pp1 - index;

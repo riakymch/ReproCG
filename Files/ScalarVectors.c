@@ -11,7 +11,7 @@ void CreateInts (int **vint, int dim) {
 }
 
 void RemoveInts (int **vint) { 
-	if (*vint != NULL) free (*vint); *vint = NULL; 
+	if (*vint != NULL) {free (*vint); *vint = NULL;}
 }
 
 void InitInts (int *vint, int dim, int frst, int incr) {
@@ -77,7 +77,7 @@ void CreateDoubles (double **vdbl, int dim) {
 }
 
 void RemoveDoubles (double **vdbl) { 
-	if (*vdbl != NULL) free (*vdbl); *vdbl = NULL; 
+	if (*vdbl != NULL) { free (*vdbl); *vdbl = NULL; }
 }
 
 void InitDoubles (double *vdbl, int dim, double frst, double incr) {
@@ -118,10 +118,12 @@ double DotDoubles (double *vdbl1, double *vdbl2, int dim) {
 	return res;
 }
 
+// TODO: discuss with Jose: what do we try to do here?
 void VvecDoubles (double alfa, double *src1, double *src2, double beta, double *dst, int dim) {
 	int i;
 
-	for (i=0; i<dim; i++) { 
+	for (i=0; i<dim; i++) {
+        // TODO: split it becasue of fma 
 		*dst = (beta * *dst) + (alfa * *(src1++) * *(src2++)); dst++; 
 	}
 }

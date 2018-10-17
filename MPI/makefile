@@ -3,9 +3,9 @@
 # ============================================================
 
 CC = mpicc
-CFLAGS = -Wall -g -openmp -I.
-CFLAGS = -Wall -openmp -I.
-CFLAGS = -Wall -openmp -I. $(MKL_COPTIONS)
+CFLAGS = -Wall -g -openmp -I.  -I${MKLROOT}/include
+CFLAGS = -Wall -openmp -I. -I${MKLROOT}/include
+CLFLAGS = -Wall -fopenmp -I. -I${MKLROOT}/include
 
 CLINKER = mpicc
 FLINKER = mpif77
@@ -15,16 +15,17 @@ LIBLIST = -L. -lhbio -lclock -lvector -lm -lc
 LIBLIST = -L. -lhbio -lclock -lm -lc
 LIBLIST = -L. -lsparse -lvector -lclock -lm -lc
 
-LIBMKL = -L$(DIR_MKL) $(MKL_FMULTIS_INTEL)
+#LIBMKL = -L$(MKLROOT)/lib/intel64 $(MKL_FMULTIS_INTEL)
+LIBMKL = -L${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_core -lmkl_sequential -lpthread
 
 # ============================================================
 # GNU COMPILERS
 # ============================================================
 
 CC = mpicc
-CFLAGS = -Wall -g -fopenmp -I.
-CLFLAGS = -Wall -fopenmp -I. 
-CLFLAGS = -Wall -fopenmp -I. $(MKL_COPTIONS)
+CFLAGS = -Wall -g -fopenmp -I. -I${MKLROOT}/include
+CFLAGS = -Wall -fopenmp -I. -I${MKLROOT}/include
+CLFLAGS = -Wall -fopenmp -I. -I${MKLROOT}/include
 
 CLINKER = mpicc
 FLINKER = mpif77
@@ -34,7 +35,8 @@ LIBLIST = -L. -lhbio -lclock -lvector -lm -lc
 LIBLIST = -L. -lhbio -lclock -lm -lc
 LIBLIST = -L. -lsparse -lvector -lclock -lm -lc
 
-LIBMKL = -L$(DIR_MKL) $(MKL_FMULTIS_INTEL)
+#LIBMKL = -L$(MKLROOT)/lib/intel64 $(MKL_FMULTIS_INTEL)
+LIBMKL = -L${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_core -lmkl_sequential -lpthread
 
 # ============================================================
 
@@ -77,13 +79,13 @@ CG_MPI: CG_MPI.o ToolsMPI.o
 # ============================================================
 
 .c.o:
-	echo compilando
+	echo compiling
 	$(CC) $(CFLAGS) -c $*.c
 
 clean:
-	rm *.o
+	rm -f *.o CG_MPI
 
 clear:
-	rm *.o *.a
+	rm -f *.o *.a CG_MPI
 
 # ============================================================
