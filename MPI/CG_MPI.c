@@ -73,7 +73,14 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     }
     MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // ReproAllReduce -- End
-    tol = sqrt (beta);
+#ifdef PRECOND
+//              tol = dnrm2 (&n_dist, res, &IONE);                                      // tol = norm (res)
+    tol = ddot (&n_dist, res, &IONE, res, &IONE);                      // beta = res' * res                     
+    MPI_Allreduce (MPI_IN_PLACE, &tol, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    tol = sqrt (tol);                                                                                                   // tol = norm (res)
+#else
+    tol = sqrt (beta);                                                                                                  // tol = norm (res)
+#endif
     while ((iter < maxiter) && (tol > umbral)) {
         if (myId == 0) reloj (&p1, &p2);
         MPI_Allgatherv (d, sizeR, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
@@ -122,12 +129,15 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         alpha = beta / alpha;                                         		// alpha = beta / alpha
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
         daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
-#if PRECOND
-        tol = dnrm2 (&n_dist, res, &IONE);                              	// tol = norm (res)
+#ifdef PRECOND
+//              tol = dnrm2 (&n_dist, res, &IONE);                                      // tol = norm (res)
+       tol = ddot (&n_dist, res, &IONE, res, &IONE);                      // beta = res' * res                     
+       MPI_Allreduce (MPI_IN_PLACE, &tol, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+       tol = sqrt (tol);                                                                                                   // tol = norm (res)
 #else
-        tol = sqrt (beta);                              									// tol = norm (res)
+       tol = sqrt (beta);                                                                                                  // tol = norm (res)
 #endif
-        iter++;
+       iter++;
     }
     MPI_Barrier(MPI_COMM_WORLD);
     if (myId == 0) reloj (&t3, &t4);
