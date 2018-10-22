@@ -6,15 +6,18 @@
 #include <mkl_blas.h>
 #include <mpi.h>
 #include <hb_io.h>
+#include <vector>
 
 #include "reloj.h"
 #include "ScalarVectors.h"
 #include "SparseProduct.h"
 #include "ToolsMPI.h"
 
+#include "exblas/exdot_serial.h"
+
 // ================================================================================
 
-#define PRECOND 0
+#define PRECOND 1
 
 void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int *dspls, double *rbuf, int myId) {
     int size = mat.dim2, sizeR = mat.dim1; 
@@ -40,16 +43,26 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     CreateInts (&posd, n_dist);
     CreateDoubles (&diags, n_dist);
     GetDiagonalSparseMatrix2 (mat, dspls[myId], diags, posd);
-//#pragma omp parallel for
+#pragma omp parallel for
     for (i=0; i<n_dist; i++) diags[i] = DONE / diags[i];
 #endif
     CreateDoubles (&aux, n); 
 
-    if (myId == 0) reloj (&t1, &t2);
+    // write to file for testing purpose
+    FILE *fp;
+    if (myId == 0) {
+         char name[50];
+         sprintf(name, "%d.txt", nProcs);
+         fp = fopen(name,"w");
+    }
+
+    if (myId == 0) 
+        reloj (&t1, &t2);
     iter = 0;
     reloj (&p1, &p2);
-    MPI_Allgatherv (x, sizeR, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
-    InitDoubles (z, sizeR, DZERO, DZERO);
+
+    MPI_Allgatherv (x, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
+    InitDoubles (z, n_dist, DZERO, DZERO);
     ProdSparseMatrixVectorByRows (mat, 0, aux, z);            			// z = A * x
     reloj (&p3, &p4); pp1 = (p3 - p1); pp2 = (p4 - p2);
     dcopy (&n_dist, b, &IONE, res, &IONE);                          		// res = b
@@ -57,90 +70,100 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #if PRECOND
     VvecDoubles (DONE, diags, res, DZERO, y, n_dist);                    // y = D^-1 * res
 #else
-    y = res;																														// y = res
+    y = res;
 #endif
     dcopy (&n_dist, y, &IONE, d, &IONE);                                // d = y
-    beta = ddot (&n_dist, res, &IONE, y, &IONE);                        // beta = res' * y
-    //MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    //beta = ddot (&n_dist, res, &IONE, y, &IONE);                        // beta = res' * y
     // ReproAllReduce -- Begin
-    //MPI_Allgather(&beta, 1, MPI_DOUBLE, rbuf, 1, MPI_DOUBLE, MPI_COMM_WORLD);
-    MPI_Gather(&beta, 1, MPI_DOUBLE, rbuf, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    std::vector<int64_t> h_superacc(exblas::BIN_COUNT);
+    exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
+    int imin=exblas::IMIN, imax=exblas::IMAX;
+    exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+    MPI_Reduce (&h_superacc[0], &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     if (myId == 0) {
-        beta = 0.0;
-        for (int ired = 0; ired < nProcs; ired++) {
-            beta += rbuf[ired];
-        }
+        beta = exblas::cpu::Round( &h_superacc[0] );
     }
     MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // ReproAllReduce -- End
-#ifdef PRECOND
-//              tol = dnrm2 (&n_dist, res, &IONE);                                      // tol = norm (res)
-    tol = ddot (&n_dist, res, &IONE, res, &IONE);                      // beta = res' * res                     
-    MPI_Allreduce (MPI_IN_PLACE, &tol, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    tol = sqrt (tol);                                                                                                   // tol = norm (res)
-#else
-    tol = sqrt (beta);                                                                                                  // tol = norm (res)
-#endif
+
+    tol = sqrt (beta);
+
     while ((iter < maxiter) && (tol > umbral)) {
-        if (myId == 0) reloj (&p1, &p2);
-        MPI_Allgatherv (d, sizeR, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
-        InitDoubles (z, sizeR, DZERO, DZERO);
+        if (myId == 0) 
+            reloj (&p1, &p2);
+
+        MPI_Allgatherv (d, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
+        // print aux
+        if (myId == 0) {
+            fprintf(fp, "%d ", iter);
+            for (int ip = 0; ip < n; ip++)
+                fprintf(fp, "%20.10e ", aux[ip]);
+            fprintf(fp, "\n");
+        }
+
+        InitDoubles (z, n_dist, DZERO, DZERO);
         ProdSparseMatrixVectorByRows (mat, 0, aux, z);            		// z = A * d
-        if (myId == 0) printf ("(%d,%20.10e)\n", iter, tol);
+
+        if (myId == 0) 
+            printf ("(%d,%20.10e)\n", iter, tol);
         if (myId == 0) {
             reloj (&p3, &p4); pp1 += (p3 - p1); pp2 += (p4 - p2);
         }
-        rho = ddot (&n_dist, d, &IONE, z, &IONE);                   
-        //MPI_Allreduce (MPI_IN_PLACE, &rho, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+        //rho = ddot (&n_dist, d, &IONE, z, &IONE);
         // ReproAllReduce -- Begin
-        //MPI_Allgather(&rho, 1, MPI_DOUBLE, rbuf, 1, MPI_DOUBLE, MPI_COMM_WORLD);
-        MPI_Gather(&rho, 1, MPI_DOUBLE, rbuf, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        exblas::exdot_cpu (n_dist, d, z, &h_superacc[0]);
+        imin=exblas::IMIN, imax=exblas::IMAX;
+        exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+        MPI_Reduce (&h_superacc[0], &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
         if (myId == 0) {
-            rho = 0.0;
-            for (int ired = 0; ired < nProcs; ired++) {
-                rho += rbuf[ired];
-            }
+            rho = exblas::cpu::Round( &h_superacc[0] );
         }
         MPI_Bcast(&rho, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         // ReproAllReduce -- End
+
         rho = beta / rho;
         daxpy (&n_dist, &rho, d, &IONE, x, &IONE);                      	// x += rho * d;
+
         rho = -rho;
         daxpy (&n_dist, &rho, z, &IONE, res, &IONE);                      // res -= rho * z
+
 #if PRECOND
         VvecDoubles (DONE, diags, res, DZERO, y, n_dist);                 // y = D^-1 * res
 #else
-        y = res;																													// y = res
+        y = res;
 #endif
         alpha = beta;                                                 		// alpha = beta
-        beta = ddot (&n_dist, res, &IONE, y, &IONE);                      // beta = res' * y                     
-        //MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+        //beta = ddot (&n_dist, res, &IONE, y, &IONE);                      // beta = res' * y                     
         // ReproAllReduce -- Begin
-        //MPI_Allgather(&beta, 1, MPI_DOUBLE, rbuf, 1, MPI_DOUBLE, MPI_COMM_WORLD);
-        MPI_Gather(&beta, 1, MPI_DOUBLE, rbuf, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
+        imin=exblas::IMIN, imax=exblas::IMAX;
+        exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+        MPI_Reduce (&h_superacc[0], &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
         if (myId == 0) {
-            beta = 0.0;
-            for (int ired = 0; ired < nProcs; ired++) {
-                beta += rbuf[ired];
-            }
+            beta = exblas::cpu::Round( &h_superacc[0] );
         }
         MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         // ReproAllReduce -- End
+
         alpha = beta / alpha;                                         		// alpha = beta / alpha
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
         daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
-#ifdef PRECOND
-//              tol = dnrm2 (&n_dist, res, &IONE);                                      // tol = norm (res)
-       tol = ddot (&n_dist, res, &IONE, res, &IONE);                      // beta = res' * res                     
-       MPI_Allreduce (MPI_IN_PLACE, &tol, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-       tol = sqrt (tol);                                                                                                   // tol = norm (res)
-#else
-       tol = sqrt (beta);                                                                                                  // tol = norm (res)
-#endif
-       iter++;
+
+        // error
+        tol = sqrt (beta);                              									// tol = norm (res)
+
+        iter++;
     }
+
+    if (myId == 0)
+        fclose(fp);
+
     MPI_Barrier(MPI_COMM_WORLD);
-    if (myId == 0) reloj (&t3, &t4);
+    if (myId == 0) 
+        reloj (&t3, &t4);
 
     if (myId == 0)
         printf ("Fin(%d) --> (%d,%20.10e) tiempo (%20.10e,%20.10e) prod (%20.10e,%20.10e)\n", 
@@ -228,21 +251,23 @@ int main (int argc, char **argv) {
 
     // Error computation
     for (i=0; i<dimL; i++) sol2L[i] -= 1.0;
-    beta = ddot (&dimL, sol2L, &IONE, sol2L, &IONE);                       
-    //MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    //beta = ddot (&dimL, sol2L, &IONE, sol2L, &IONE); 
     // ReproAllReduce -- Begin
-    //MPI_Allgather(&beta, 1, MPI_DOUBLE, rbuf, 1, MPI_DOUBLE, MPI_COMM_WORLD);
-    MPI_Gather(&beta, 1, MPI_DOUBLE, rbuf, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    std::vector<int64_t> h_superacc(exblas::BIN_COUNT);
+    exblas::exdot_cpu (dimL, sol2L, sol2L, &h_superacc[0]);
+    int imin=exblas::IMIN, imax=exblas::IMAX;
+    exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+    MPI_Reduce (&h_superacc[0], &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     if (myId == 0) {
-        beta = 0.0;
-        for (int ired = 0; ired < nProcs; ired++) {
-            beta += rbuf[ired];
-        }
+        beta = exblas::cpu::Round( &h_superacc[0] );
     }
     MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // ReproAllReduce -- End
+
     beta = sqrt(beta);
-    if (myId == 0) printf ("error = %10.5e\n", beta);
+    if (myId == 0) 
+        printf ("error = %10.5e\n", beta);
 
     /***************************************/
     // Freeing memory

@@ -1,34 +1,34 @@
-# ============================================================
-# INTEL COMPILERS
-# ============================================================
-
-CC = mpicc
-CFLAGS = -Wall -g -openmp -I.  -I${MKLROOT}/include
-CFLAGS = -Wall -openmp -I. -I${MKLROOT}/include
-CLFLAGS = -Wall -fopenmp -I. -I${MKLROOT}/include
-
-CLINKER = mpicc
-FLINKER = mpif77
-LDFLAGS = -openmp
-LIBLIST = -L. -lhbio -lclock -lsparsenew -lvector -lm -lc
-LIBLIST = -L. -lhbio -lclock -lvector -lm -lc
-LIBLIST = -L. -lhbio -lclock -lm -lc
-LIBLIST = -L. -lsparse -lvector -lclock -lm -lc
-
-#LIBMKL = -L$(MKLROOT)/lib/intel64 $(MKL_FMULTIS_INTEL)
-LIBMKL = -L${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_core -lmkl_sequential -lpthread
+## ============================================================
+## INTEL COMPILERS
+## ============================================================
+#
+#CC = mpicc
+#CFLAGS = -Wall -g -openmp -I.  -I${MKLROOT}/include
+#CFLAGS = -Wall -openmp -I. -I${MKLROOT}/include
+#CLFLAGS = -Wall -fopenmp -I. -I${MKLROOT}/include
+#
+#CLINKER = mpicc
+#FLINKER = mpif77
+#LDFLAGS = -openmp
+#LIBLIST = -L. -lhbio -lclock -lsparsenew -lvector -lm -lc
+#LIBLIST = -L. -lhbio -lclock -lvector -lm -lc
+#LIBLIST = -L. -lhbio -lclock -lm -lc
+#LIBLIST = -L. -lsparse -lvector -lclock -lm -lc
+#
+##LIBMKL = -L$(MKLROOT)/lib/intel64 $(MKL_FMULTIS_INTEL)
+#LIBMKL = -L${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_core -lmkl_sequential -lpthread
 
 # ============================================================
 # GNU COMPILERS
 # ============================================================
 
-CC = mpicc
-CFLAGS = -Wall -g -fopenmp -I. -I${MKLROOT}/include
-CFLAGS = -Wall -fopenmp -I. -I${MKLROOT}/include
+CC = mpic++
+#CFLAGS = -Wall -fopenmp -I. -I${MKLROOT}/include
+#CFLAGS = -std=c++11 -mavx -mfma -fabi-version=0 -Wall -fopenmp -I. -I${MKLROOT}/include -I${HOME}/libs
+CFLAGS = -std=c++11 -mavx -fabi-version=0 -Wall -fopenmp -I. -I${MKLROOT}/include -I${HOME}/libs
 CLFLAGS = -Wall -fopenmp -I. -I${MKLROOT}/include
 
-CLINKER = mpicc
-FLINKER = mpif77
+CLINKER = mpic++
 LDFLAGS = -fopenmp
 LIBLIST = -L. -lhbio -lclock -lsparsenew -lvector -lm -lc
 LIBLIST = -L. -lhbio -lclock -lvector -lm -lc
