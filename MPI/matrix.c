@@ -420,7 +420,7 @@ void allocate_matrix(const int m, const int n, const int nnz, ptr_SparseMatrix A
 	}*/
 	if( ! A->vval || ! A->vpos || ! A->vptr )
 	{
-		fprintf(stderr, "Allocating sparse matrix of size %d rows and %ld non-zeros failed !\n", n, nnz);
+		fprintf(stderr, "Allocating sparse matrix of size %d rows and %d non-zeros failed !\n", n, nnz);
 		exit(2);
 	}
 	fprintf(stderr, "Matrix allocated\n");
