@@ -28,7 +28,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     double *res = NULL, *z = NULL, *d = NULL, *y = NULL;
     double *aux = NULL;
     double t1, t2, t3, t4;
-    double p1, p2, p3, p4, pp1 = 0.0, pp2 = 0.0;
 #if PRECOND
     int i, *posd = NULL;
     double *diags = NULL;
@@ -57,15 +56,15 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
          fp = fopen(name,"w");
     }
 
-    if (myId == 0) 
-        reloj (&t1, &t2);
+   // if (myId == 0) 
+   //     reloj (&t1, &t2);
     iter = 0;
-    reloj (&p1, &p2);
+   // reloj (&p1, &p2);
 
     MPI_Allgatherv (x, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
     InitDoubles (z, n_dist, DZERO, DZERO);
     ProdSparseMatrixVectorByRows (mat, 0, aux, z);            			// z = A * x
-    reloj (&p3, &p4); pp1 = (p3 - p1); pp2 = (p4 - p2);
+   // reloj (&p3, &p4); pp1 = (p3 - p1); pp2 = (p4 - p2);
     dcopy (&n_dist, b, &IONE, res, &IONE);                          		// res = b
     daxpy (&n_dist, &DMONE, z, &IONE, res, &IONE);                      // res -= z
 #if PRECOND
@@ -89,10 +88,10 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     // ReproAllReduce -- End
 
     tol = sqrt (beta);
-
+    MPI_Barrier(MPI_COMM_WORLD);
     while ((iter < maxiter) && (tol > umbral)) {
         if (myId == 0) 
-            reloj (&p1, &p2);
+            reloj (&t1, &t2);
 
         MPI_Allgatherv (d, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
 
@@ -101,9 +100,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
         if (myId == 0) 
             printf ("(%d,%20.10e)\n", iter, tol);
-        if (myId == 0) {
-            reloj (&p3, &p4); pp1 += (p3 - p1); pp2 += (p4 - p2);
-        }
 
         //rho = ddot (&n_dist, d, &IONE, z, &IONE);
         // ReproAllReduce -- Begin
@@ -152,6 +148,10 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         iter++;
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (myId == 0) 
+        reloj (&t3, &t4);
+    
     // print aux
     MPI_Allgatherv (x, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
     if (myId == 0) {
@@ -163,14 +163,18 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
     if (myId == 0)
         fclose(fp);
+    if (myId == 0) {
+      printf ("Size: %d \n", n);
+      printf ("Iter: %d \n", iter);
+      printf ("Tol: %20.10e \n", tol);
+      printf ("Time_loop: %20.10e\n", (t3-t1));
+      printf ("Time_iter: %20.10e\n", (t3-t1)/iter);
+    }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    if (myId == 0) 
-        reloj (&t3, &t4);
 
-    if (myId == 0)
-        printf ("Fin(%d) --> (%d,%20.10e) tiempo (%20.10e,%20.10e) prod (%20.10e,%20.10e)\n", 
-                n, iter, tol, t3-t1, t4-t2, pp1, pp2);
+    //if (myId == 0)
+    //    printf ("Fin(%d) --> (%d,%20.10e) tiempo (%20.10e,%20.10e) prod (%20.10e,%20.10e)\n", 
+    //            n, iter, tol, t3-t1, t4-t2, pp1, pp2);
 
     RemoveDoubles (&aux); RemoveDoubles (&res); RemoveDoubles (&z); RemoveDoubles (&d);
 #if PRECOND
@@ -202,17 +206,35 @@ int main (int argc, char **argv) {
 
     /***************************************/
 
-    // Creating the matrix
-    if (myId == root) {
+    CreateInts (&vdimL, nProcs); CreateInts (&vdspL, nProcs); 
+    if(mat_from_file) {
+      if (myId == root) {
+        // Creating the matrix
         ReadMatrixHB (argv[1], &sym);
         DesymmetrizeSparseMatrices (sym, 0, &mat, 0);
         dim = mat.dim1;
+      }
+    
+      // Distributing the matrix
+      dim = DistributeMatrix (mat, index, &matL, indexL, vdimL, vdspL, root, MPI_COMM_WORLD);
+      dimL = vdimL[myId];
     }
-
-    // Distributing the matrix
-    CreateInts (&vdimL, nProcs); CreateInts (&vdspL, nProcs); 
-    dim = DistributeMatrix (mat, index, &matL, indexL, vdimL, vdspL, root, MPI_COMM_WORLD);
-    dimL = vdimL[myId];
+    else {
+      dim = size_param * size_param * size_param;
+      int divL, rstL, i;
+      divL = (dim / nProcs); rstL = (dim % nProcs);
+      for (i=0; i<nProcs; i++) vdimL[i] = divL + (i < rstL);
+      vdspL[0] = 0; for (i=1; i<nProcs; i++) vdspL[i] = vdspL[i-1] + vdimL[i-1];
+      dimL = vdimL[myId]; dspL = vdspL[myId];
+      int band_width = size_param * (size_param + 1) + 1;
+      band_width = 100 * nodes;
+      long nnz_here = ((long) (stencil_points + 2 * band_width)) * dimL;
+      printf ("dimL: %d, nodes: %d, size_param: %d, band_width: %d, stencil_points: %d, nnz_here: %ld\n",
+              dimL, nodes, size_param, band_width, stencil_points, nnz_here);
+      allocate_matrix(dimL, dim, nnz_here, &matL);
+      generate_Poisson3D_filled(&matL, size_param, stencil_points, band_width, dspL, dimL, dim);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
 
     // Creating the vectors
     if (myId == root) {
@@ -245,9 +267,18 @@ int main (int argc, char **argv) {
         InitDoubles (vec, dim, 1.0, 0.0);
         InitDoubles (sol1, dim, 0.0, 0.0);
         InitDoubles (sol2, dim, 0.0, 0.0);
-        ProdSparseMatrixVectorByRows (mat, 0, vec, sol1);
+      //  ProdSparseMatrixVectorByRows (mat, 0, vec, sol1);
     }
-    MPI_Scatterv (sol1, vdimL, vdspL, MPI_DOUBLE, sol1L, dimL, MPI_DOUBLE, root, MPI_COMM_WORLD);
+    int k=0;
+    int *vptrM = matL.vptr;
+    for (int i=0; i < matL.dim1; i++) {
+      for(int j=vptrM[i]; j<vptrM[i+1]; j++) {
+        sol1L[k] += matL.vval[j];
+    }
+    k++;
+    }
+
+    //MPI_Scatterv (sol1, vdimL, vdspL, MPI_DOUBLE, sol1L, dimL, MPI_DOUBLE, root, MPI_COMM_WORLD);
     MPI_Scatterv (sol2, vdimL, vdspL, MPI_DOUBLE, sol2L, dimL, MPI_DOUBLE, root, MPI_COMM_WORLD);
 
     ConjugateGradient (matL, sol2L, sol1L, vdimL, vdspL, rbuf, myId);
@@ -270,7 +301,7 @@ int main (int argc, char **argv) {
 
     beta = sqrt(beta);
     if (myId == 0) 
-        printf ("error = %10.5e\n", beta);
+        printf ("Error: %10.5e\n", beta);
 
     /***************************************/
     // Freeing memory
