@@ -12,6 +12,7 @@
 #include "ScalarVectors.h"
 #include "SparseProduct.h"
 #include "ToolsMPI.h"
+#include "matrix.h"
 
 #include "exblas/exdot_serial.h"
 
@@ -191,7 +192,7 @@ int main (int argc, char **argv) {
     SparseMatrix mat  = {0, 0, NULL, NULL, NULL}, sym = {0, 0, NULL, NULL, NULL};
 
     int root = 0, myId, nProcs;
-    int dimL, *vdimL = NULL, *vdspL = NULL;
+    int dimL, dspL, *vdimL = NULL, *vdspL = NULL;
     SparseMatrix matL = {0, 0, NULL, NULL, NULL};
     double *vecL = NULL, *sol1L = NULL, *sol2L = NULL, *rbuf = NULL;
     int mat_from_file = atoi(argv[2]);
@@ -221,7 +222,7 @@ int main (int argc, char **argv) {
     
       // Distributing the matrix
       dim = DistributeMatrix (mat, index, &matL, indexL, vdimL, vdspL, root, MPI_COMM_WORLD);
-      dimL = vdimL[myId];
+      dimL = vdimL[myId]; dspL = vdspL[myId];
     }
     else {
       dim = size_param * size_param * size_param;
