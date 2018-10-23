@@ -73,8 +73,8 @@ libsparse.a : $(OBJS_SPARSE)
 	$(AR) $(ARFLAGS) $@ $?
 	$(RL) $(RLFLAGS) $@
 
-CG_MPI: CG_MPI.o ToolsMPI.o 
-	$(CLINKER) $(LDFLAGS) -o CG_MPI CG_MPI.o ToolsMPI.o $(LIBMKL) $(LIBLIST)
+CG_MPI: CG_MPI.o ToolsMPI.o matrix.o 
+	$(CLINKER) $(LDFLAGS) -o CG_MPI CG_MPI.o ToolsMPI.o matrix.o $(LIBMKL) $(LIBLIST)
 
 # ============================================================
 
