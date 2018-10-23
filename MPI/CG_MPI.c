@@ -90,9 +90,8 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
     tol = sqrt (beta);
     MPI_Barrier(MPI_COMM_WORLD);
+    if (myId == 0) reloj (&t1, &t2);
     while ((iter < maxiter) && (tol > umbral)) {
-        if (myId == 0) 
-            reloj (&t1, &t2);
 
         MPI_Allgatherv (d, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
 
