@@ -194,6 +194,10 @@ int main (int argc, char **argv) {
     int dimL, *vdimL = NULL, *vdspL = NULL;
     SparseMatrix matL = {0, 0, NULL, NULL, NULL};
     double *vecL = NULL, *sol1L = NULL, *sol2L = NULL, *rbuf = NULL;
+    int mat_from_file = atoi(argv[2]);
+    int nodes = atoi(argv[3]);
+    int size_param = atoi(argv[4]);
+    int stencil_points = atoi(argv[5]);
 
     /***************************************/
 
