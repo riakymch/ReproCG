@@ -12,7 +12,7 @@
 // finite-difference method for a 3D Poisson's equation with a 7, 19 or 27 point stencil
 void generate_Poisson3D(ptr_SparseMatrix A, const int p, const int stencil_points, int dspL, int dimL, int dim)
 {
-	int p2 = p * p, p3 = p2 * p, i, j=0; //, pos=0;
+	int p2 = p * p, i, j=0; //, pos=0;
 	int pos = 0;
 	int *vptr = A->vptr;
 	const int    *stenc_c;
@@ -101,19 +101,17 @@ void generate_Poisson3D(ptr_SparseMatrix A, const int p, const int stencil_point
 // finite-difference method for a 3D Poisson's equation with a 7, 19 or 27 point stencil
 void generate_Poisson3D_filled(ptr_SparseMatrix A, const int p, const int stencil_points, int band_width, int dspL, int dimL, int dim)
 {
-	int p2 = p * p, p3 = p2 * p, i, j=0; //, pos=0;
+	int p2 = p * p, i, j=0; //, pos=0;
 	int pos = 0;
 	int *vptr = A->vptr;
 	const double value = 0.1;
 	const int    *stenc_c;
 	const double *stenc_v;
 
-	const int    bandW_c7 = p2;
 	const int    stenc_c7[]  = { -p2,  -p,  -1,   0,   1,   p,  p2};
 	const double stenc_v7[]  = { -1.0, -1.0, -1.0, 6.0, -1.0, -1.0, -1.0};
 
 	const double r = 1.0;
-	const int    bandW_c19 = p2+p;
 	const int    stenc_c19[] =
 	{
 		       -p2-p,          -p2-1,  -p2+0, -p2+1,          -p2+p,
@@ -127,7 +125,6 @@ void generate_Poisson3D_filled(ptr_SparseMatrix A, const int p, const int stenci
 		     -(1+r),      -(1+r),    -(8*r-4),   -(1+r),      -(1+r)
 	};
 
-	const int    bandW_c27 = p2+p+1;
 	const int    stenc_c27[] =
 	{
 		-p2-p-1, -p2-p, -p2-p+1, -p2-1,  -p2+0, -p2+1, -p2+p-1, -p2+p, -p2+p+1,
@@ -270,7 +267,7 @@ void generate_Poisson3D_filled(ptr_SparseMatrix A, const int p, const int stenci
 
 void generate_Poisson3D_perm(ptr_SparseMatrix A, const int p, const int stencil_points, int init, int step, int dimL, int dim)
 {
-	int p2 = p * p, p3 = p2 * p, i, j=0; //, pos=0;
+	int p2 = p * p, i, j=0; //, pos=0;
 	int pos = 0;
 	int *vptr = A->vptr;
 	const int    *stenc_c;

@@ -265,7 +265,7 @@ int main (int argc, char **argv) {
 
     /***************************************/
 
-    int i, IONE = 1;
+    int i;
     double beta;
     if (myId == root) {
         InitDoubles (vec, dim, 1.0, 0.0);
