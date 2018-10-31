@@ -52,20 +52,20 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     // write to file for testing purpose
     FILE *fp;
     if (myId == 0) {
-         char name[50];
-         sprintf(name, "%d.txt", nProcs);
-         fp = fopen(name,"w");
+        char name[50];
+        sprintf(name, "%d.txt", nProcs);
+        fp = fopen(name,"w");
     }
 
-   // if (myId == 0) 
-   //     reloj (&t1, &t2);
+    // if (myId == 0) 
+    //     reloj (&t1, &t2);
     iter = 0;
-   // reloj (&p1, &p2);
+    // reloj (&p1, &p2);
 
     MPI_Allgatherv (x, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
     InitDoubles (z, n_dist, DZERO, DZERO);
     ProdSparseMatrixVectorByRows (mat, 0, aux, z);            			// z = A * x
-   // reloj (&p3, &p4); pp1 = (p3 - p1); pp2 = (p4 - p2);
+    // reloj (&p3, &p4); pp1 = (p3 - p1); pp2 = (p4 - p2);
     dcopy (&n_dist, b, &IONE, res, &IONE);                          		// res = b
     daxpy (&n_dist, &DMONE, z, &IONE, res, &IONE);                      // res -= z
 #if PRECOND
@@ -81,7 +81,11 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
     int imin=exblas::IMIN, imax=exblas::IMAX;
     exblas::cpu::Normalize(&h_superacc[0], imin, imax);
-    MPI_Reduce (&h_superacc[0], &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (myId == 0) {
+        MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    } else {
+        MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
     if (myId == 0) {
         beta = exblas::cpu::Round( &h_superacc[0] );
     }
@@ -106,7 +110,11 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         exblas::exdot_cpu (n_dist, d, z, &h_superacc[0]);
         imin=exblas::IMIN, imax=exblas::IMAX;
         exblas::cpu::Normalize(&h_superacc[0], imin, imax);
-        MPI_Reduce (&h_superacc[0], &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (myId == 0) {
+            MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        }
         if (myId == 0) {
             rho = exblas::cpu::Round( &h_superacc[0] );
         }
@@ -131,7 +139,11 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
         imin=exblas::IMIN, imax=exblas::IMAX;
         exblas::cpu::Normalize(&h_superacc[0], imin, imax);
-        MPI_Reduce (&h_superacc[0], &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (myId == 0) {
+            MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        }
         if (myId == 0) {
             beta = exblas::cpu::Round( &h_superacc[0] );
         }
@@ -151,7 +163,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     MPI_Barrier(MPI_COMM_WORLD);
     if (myId == 0) 
         reloj (&t3, &t4);
-    
+
     // print aux
     MPI_Allgatherv (x, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
     if (myId == 0) {
@@ -164,11 +176,11 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     if (myId == 0)
         fclose(fp);
     if (myId == 0) {
-      printf ("Size: %d \n", n);
-      printf ("Iter: %d \n", iter);
-      printf ("Tol: %20.10e \n", tol);
-      printf ("Time_loop: %20.10e\n", (t3-t1));
-      printf ("Time_iter: %20.10e\n", (t3-t1)/iter);
+        printf ("Size: %d \n", n);
+        printf ("Iter: %d \n", iter);
+        printf ("Tol: %20.10e \n", tol);
+        printf ("Time_loop: %20.10e\n", (t3-t1));
+        printf ("Time_iter: %20.10e\n", (t3-t1)/iter);
     }
 
 
@@ -194,10 +206,15 @@ int main (int argc, char **argv) {
     int dimL, dspL, *vdimL = NULL, *vdspL = NULL;
     SparseMatrix matL = {0, 0, NULL, NULL, NULL};
     double *vecL = NULL, *sol1L = NULL, *sol2L = NULL, *rbuf = NULL;
-    int mat_from_file = atoi(argv[2]);
-    int nodes = atoi(argv[3]);
-    int size_param = atoi(argv[4]);
-    int stencil_points = atoi(argv[5]);
+    int mat_from_file, nodes, size_param, stencil_points;
+    if (argc == 3) {
+        mat_from_file = atoi(argv[2]);
+    } else {
+        mat_from_file = atoi(argv[2]);
+        nodes = atoi(argv[3]);
+        size_param = atoi(argv[4]);
+        stencil_points = atoi(argv[5]);
+    }
 
     /***************************************/
 
@@ -212,31 +229,31 @@ int main (int argc, char **argv) {
 
     CreateInts (&vdimL, nProcs); CreateInts (&vdspL, nProcs); 
     if(mat_from_file) {
-      if (myId == root) {
-        // Creating the matrix
-        ReadMatrixHB (argv[1], &sym);
-        DesymmetrizeSparseMatrices (sym, 0, &mat, 0);
-        dim = mat.dim1;
-      }
-    
-      // Distributing the matrix
-      dim = DistributeMatrix (mat, index, &matL, indexL, vdimL, vdspL, root, MPI_COMM_WORLD);
-      dimL = vdimL[myId]; dspL = vdspL[myId];
+        if (myId == root) {
+            // Creating the matrix
+            ReadMatrixHB (argv[1], &sym);
+            DesymmetrizeSparseMatrices (sym, 0, &mat, 0);
+            dim = mat.dim1;
+        }
+
+        // Distributing the matrix
+        dim = DistributeMatrix (mat, index, &matL, indexL, vdimL, vdspL, root, MPI_COMM_WORLD);
+        dimL = vdimL[myId]; dspL = vdspL[myId];
     }
     else {
-      dim = size_param * size_param * size_param;
-      int divL, rstL, i;
-      divL = (dim / nProcs); rstL = (dim % nProcs);
-      for (i=0; i<nProcs; i++) vdimL[i] = divL + (i < rstL);
-      vdspL[0] = 0; for (i=1; i<nProcs; i++) vdspL[i] = vdspL[i-1] + vdimL[i-1];
-      dimL = vdimL[myId]; dspL = vdspL[myId];
-      int band_width = size_param * (size_param + 1) + 1;
-      band_width = 100 * nodes;
-      long nnz_here = ((long) (stencil_points + 2 * band_width)) * dimL;
-      printf ("dimL: %d, nodes: %d, size_param: %d, band_width: %d, stencil_points: %d, nnz_here: %ld\n",
-              dimL, nodes, size_param, band_width, stencil_points, nnz_here);
-      allocate_matrix(dimL, dim, nnz_here, &matL);
-      generate_Poisson3D_filled(&matL, size_param, stencil_points, band_width, dspL, dimL, dim);
+        dim = size_param * size_param * size_param;
+        int divL, rstL, i;
+        divL = (dim / nProcs); rstL = (dim % nProcs);
+        for (i=0; i<nProcs; i++) vdimL[i] = divL + (i < rstL);
+        vdspL[0] = 0; for (i=1; i<nProcs; i++) vdspL[i] = vdspL[i-1] + vdimL[i-1];
+        dimL = vdimL[myId]; dspL = vdspL[myId];
+        int band_width = size_param * (size_param + 1) + 1;
+        band_width = 100 * nodes;
+        long nnz_here = ((long) (stencil_points + 2 * band_width)) * dimL;
+        printf ("dimL: %d, nodes: %d, size_param: %d, band_width: %d, stencil_points: %d, nnz_here: %ld\n",
+                dimL, nodes, size_param, band_width, stencil_points, nnz_here);
+        allocate_matrix(dimL, dim, nnz_here, &matL);
+        generate_Poisson3D_filled(&matL, size_param, stencil_points, band_width, dspL, dimL, dim);
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -271,15 +288,15 @@ int main (int argc, char **argv) {
         InitDoubles (vec, dim, 1.0, 0.0);
         InitDoubles (sol1, dim, 0.0, 0.0);
         InitDoubles (sol2, dim, 0.0, 0.0);
-      //  ProdSparseMatrixVectorByRows (mat, 0, vec, sol1);
+        //  ProdSparseMatrixVectorByRows (mat, 0, vec, sol1);
     }
     int k=0;
     int *vptrM = matL.vptr;
     for (int i=0; i < matL.dim1; i++) {
-      for(int j=vptrM[i]; j<vptrM[i+1]; j++) {
-        sol1L[k] += matL.vval[j];
-    }
-    k++;
+        for(int j=vptrM[i]; j<vptrM[i+1]; j++) {
+            sol1L[k] += matL.vval[j];
+        }
+        k++;
     }
 
     //MPI_Scatterv (sol1, vdimL, vdspL, MPI_DOUBLE, sol1L, dimL, MPI_DOUBLE, root, MPI_COMM_WORLD);
@@ -296,7 +313,11 @@ int main (int argc, char **argv) {
     exblas::exdot_cpu (dimL, sol2L, sol2L, &h_superacc[0]);
     int imin=exblas::IMIN, imax=exblas::IMAX;
     exblas::cpu::Normalize(&h_superacc[0], imin, imax);
-    MPI_Reduce (&h_superacc[0], &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (myId == 0) {
+        MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    } else {
+        MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
     if (myId == 0) {
         beta = exblas::cpu::Round( &h_superacc[0] );
     }

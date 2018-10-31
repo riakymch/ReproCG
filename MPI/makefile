@@ -22,13 +22,13 @@
 # GNU COMPILERS
 # ============================================================
 
-CC = mpic++
+CC = mpicxx
 #CFLAGS = -Wall -fopenmp -I. -I${MKLROOT}/include
 #CFLAGS = -std=c++11 -mavx -mfma -fabi-version=0 -Wall -fopenmp -I. -I${MKLROOT}/include -I${HOME}/libs
 CFLAGS = -std=c++11 -mavx -fabi-version=0 -Wall -fopenmp -I. -I${MKLROOT}/include -I${HOME}/libs
 CLFLAGS = -Wall -fopenmp -I. -I${MKLROOT}/include
 
-CLINKER = mpic++
+CLINKER = mpicxx
 LDFLAGS = -fopenmp
 LIBLIST = -L. -lhbio -lclock -lsparsenew -lvector -lm -lc
 LIBLIST = -L. -lhbio -lclock -lvector -lm -lc
