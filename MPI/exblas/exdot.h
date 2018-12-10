@@ -52,7 +52,7 @@ void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, double* fpe) {
 #else// _WITHOUT_VCL
     for(int i = 0; i < N; i++) {
         double r1;
-        double x = TwoProductFMA(get_element(a,i),get_element(b,i),r1);
+        double x = TwoProductFMA(a[i],b[i],r1);
         cache.Accumulate(x);
         cache.Accumulate(r1);
     }
