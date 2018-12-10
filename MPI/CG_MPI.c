@@ -14,11 +14,12 @@
 #include "ToolsMPI.h"
 #include "matrix.h"
 
-#include "exblas/exdot_serial.h"
+#include "exblas/exdot.h"
 
 // ================================================================================
 
 #define PRECOND 1
+#define N 8
 
 void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int *dspls, double *rbuf, int myId) {
     int size = mat.dim2, sizeR = mat.dim1; 
@@ -77,17 +78,15 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
     //beta = ddot (&n_dist, res, &IONE, y, &IONE);                        // beta = res' * y
     // ReproAllReduce -- Begin
-    std::vector<int64_t> h_superacc(exblas::BIN_COUNT);
-    exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
-    int imin=exblas::IMIN, imax=exblas::IMAX;
-    exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+    std::vector<double> fpe(N);
+    exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
     if (myId == 0) {
-        MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     } else {
-        MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     }
     if (myId == 0) {
-        beta = exblas::cpu::Round( &h_superacc[0] );
+        beta = exblas::cpu::Round( &fpe[0] );
     }
     MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // ReproAllReduce -- End
@@ -107,16 +106,14 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
         //rho = ddot (&n_dist, d, &IONE, z, &IONE);
         // ReproAllReduce -- Begin
-        exblas::exdot_cpu (n_dist, d, z, &h_superacc[0]);
-        imin=exblas::IMIN, imax=exblas::IMAX;
-        exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+        exblas::exdot_cpu (n_dist, d, z, &fpe[0]);
         if (myId == 0) {
-            MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+            MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         } else {
-            MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+            MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         }
         if (myId == 0) {
-            rho = exblas::cpu::Round( &h_superacc[0] );
+            rho = exblas::cpu::Round( &fpe[0] );
         }
         MPI_Bcast(&rho, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         // ReproAllReduce -- End
@@ -136,16 +133,14 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
         //beta = ddot (&n_dist, res, &IONE, y, &IONE);                      // beta = res' * y                     
         // ReproAllReduce -- Begin
-        exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
-        imin=exblas::IMIN, imax=exblas::IMAX;
-        exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+        exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
         if (myId == 0) {
-            MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+            MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         } else {
-            MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+            MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         }
         if (myId == 0) {
-            beta = exblas::cpu::Round( &h_superacc[0] );
+            beta = exblas::cpu::Round( &fpe[0] );
         }
         MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         // ReproAllReduce -- End
@@ -309,17 +304,15 @@ int main (int argc, char **argv) {
 
     //beta = ddot (&dimL, sol2L, &IONE, sol2L, &IONE); 
     // ReproAllReduce -- Begin
-    std::vector<int64_t> h_superacc(exblas::BIN_COUNT);
-    exblas::exdot_cpu (dimL, sol2L, sol2L, &h_superacc[0]);
-    int imin=exblas::IMIN, imax=exblas::IMAX;
-    exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+    std::vector<double> fpe(N);
+    exblas::exdot_cpu (dimL, sol2L, sol2L, &fpe[0]);
     if (myId == 0) {
-        MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     } else {
-        MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
     }
     if (myId == 0) {
-        beta = exblas::cpu::Round( &h_superacc[0] );
+        beta = exblas::cpu::Round( &fpe[0] );
     }
     MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // ReproAllReduce -- End
