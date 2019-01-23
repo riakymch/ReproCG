@@ -15,11 +15,32 @@
 #include "matrix.h"
 
 #include "exblas/exdot.h"
+#include "exblas/fpexpansionvect.hpp"
 
 // ================================================================================
 
 #define PRECOND 1
 #define N 8
+
+/* 
+ * operation to reduce fpes 
+ */ 
+void fpeSum( double *in, double *inout, int *len, MPI_Datatype *dptr ) { 
+
+    double s;
+    for (int j = 0; j < *len; ++j) { 
+        if (in[j] == 0.0)
+            return;
+
+        for (int i = 0; i < *len; ++i) { 
+            inout[i] = exblas::cpu::FMA2Sum(inout[i], in[j], s);
+            in[j] = s;
+            //if(true && i != 0 && !exblas::cpu::horizontal_or(in[j]))
+            if(true && i != 0 && !(in[j] != 0))
+                break;
+        }
+    }
+}
 
 void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int *dspls, double *rbuf, int myId) {
     int size = mat.dim2, sizeR = mat.dim1; 
@@ -80,11 +101,16 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     // ReproAllReduce -- Begin
     std::vector<double> fpe(N);
     exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
+
+    // user-defined reduction operations
+    MPI_Op Op;
+    MPI_Op_create( (MPI_User_function *) fpeSum, 1, &Op ); 
     if (myId == 0) {
-        MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
     } else {
-        MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
     }
+
     if (myId == 0) {
         beta = exblas::cpu::Round( &fpe[0] );
     }
@@ -108,9 +134,9 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         // ReproAllReduce -- Begin
         exblas::exdot_cpu (n_dist, d, z, &fpe[0]);
         if (myId == 0) {
-            MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+            MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
         } else {
-            MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+            MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
         }
         if (myId == 0) {
             rho = exblas::cpu::Round( &fpe[0] );
@@ -135,9 +161,9 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         // ReproAllReduce -- Begin
         exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
         if (myId == 0) {
-            MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+            MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
         } else {
-            MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+            MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
         }
         if (myId == 0) {
             beta = exblas::cpu::Round( &fpe[0] );
@@ -182,6 +208,8 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     //if (myId == 0)
     //    printf ("Fin(%d) --> (%d,%20.10e) tiempo (%20.10e,%20.10e) prod (%20.10e,%20.10e)\n", 
     //            n, iter, tol, t3-t1, t4-t2, pp1, pp2);
+
+    MPI_Op_free( &Op );
 
     RemoveDoubles (&aux); RemoveDoubles (&res); RemoveDoubles (&z); RemoveDoubles (&d);
 #if PRECOND
@@ -306,11 +334,17 @@ int main (int argc, char **argv) {
     // ReproAllReduce -- Begin
     std::vector<double> fpe(N);
     exblas::exdot_cpu (dimL, sol2L, sol2L, &fpe[0]);
+
+    // user-defined reduction operations
+    MPI_Op Op;
+    MPI_Op_create( (MPI_User_function *) fpeSum, 1, &Op ); 
     if (myId == 0) {
-        MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
     } else {
-        MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
     }
+    MPI_Op_free( &Op );
+
     if (myId == 0) {
         beta = exblas::cpu::Round( &fpe[0] );
     }
