@@ -72,7 +72,7 @@ void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, double* fpe) {
  * @param x2_ptr second array
  * @sa \c exblas::cpu::Round  to convert the superaccumulator into a double precision number
 */
-template<class PointerOrValue1, class PointerOrValue2, size_t NBFPE=8>
+template<class PointerOrValue1, class PointerOrValue2, size_t NBFPE=4>
 void exdot_cpu(unsigned size, PointerOrValue1 x1_ptr, PointerOrValue2 x2_ptr, double* fpe){
     static_assert( has_floating_value<PointerOrValue1>::value, "PointerOrValue1 needs to be T or T* with T one of (const) float or (const) double");
     static_assert( has_floating_value<PointerOrValue2>::value, "PointerOrValue2 needs to be T or T* with T one of (const) float or (const) double");

@@ -20,7 +20,7 @@
 // ================================================================================
 
 #define PRECOND 1
-#define N 8
+#define N 4
 
 /* 
  * operation to reduce fpes 
