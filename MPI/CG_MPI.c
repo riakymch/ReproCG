@@ -259,7 +259,7 @@ int main (int argc, char **argv) {
 
     beta = sqrt(beta);
     if (myId == 0) 
-        printf ("Error = %10.5e\n", beta);
+        printf ("Error: %10.5e\n", beta);
 
     /***************************************/
     // Freeing memory
