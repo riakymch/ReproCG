@@ -1,7 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
-
 /// #include "InputOutput.h"
 #include "ScalarVectors.h"
 #include "hb_io.h"
@@ -205,8 +203,7 @@ void ProdSparseMatrixVectorByRows (SparseMatrix spr, int index, double *vec, dou
 		// The dot product between the row i and the vector vec is computed
 		aux = 0.0;
 		for (j=pp1[i]; j<pp1[i+1]; j++)
-			//aux += pd1[j] * pvec[pi1[j]];
-			aux = fma(pd1[j], pvec[pi1[j]], aux);
+			aux += pd1[j] * pvec[pi1[j]];
 		// Accumulate the obtained value on the result
 		res[i] += aux; 
 	}
@@ -262,7 +259,7 @@ void ProdSparseMatrixVectorByRows_OMP (SparseMatrix spr, int index, double *vec,
 */
 
 void ProdSparseMatrixVectorByRows_OMPTasks (SparseMatrix spr, int index, double *vec, double *res, int bm) {
-	int i, j, dim = spr.dim1;
+	int i, j, idx, dim = spr.dim1;
 	int *pp1 = spr.vptr, *pi1 = spr.vpos + *pp1 - index;
 	double aux, *pvec = vec + *pp1 - index;
 	double *pd1 = spr.vval + *pp1 - index;

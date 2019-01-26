@@ -6,7 +6,6 @@
 #include <mkl_blas.h>
 #include <mpi.h>
 #include <hb_io.h>
-#include <vector>
 
 #include "reloj.h"
 #include "ScalarVectors.h"
@@ -14,15 +13,13 @@
 #include "ToolsMPI.h"
 #include "matrix.h"
 
-#include "exblas/exdot_serial.h"
-
 // ================================================================================
 
 #define PRECOND 1
 #define VECTOR_OUTPUT 0
 
-void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int *dspls, double *rbuf, int myId) {
-    int size = mat.dim2, sizeR = mat.dim1; 
+void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int *dspls, int myId) {
+    int size = mat.dim2, sizeR = mat.dim1, sizeC = mat.dim2; 
     int IONE = 1; 
     double DONE = 1.0, DMONE = -1.0, DZERO = 0.0;
     int n, n_dist, iter, maxiter, nProcs;
@@ -36,7 +33,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
 
     MPI_Comm_size(MPI_COMM_WORLD, &nProcs);
-    n = size; n_dist = sizeR; maxiter = 500; umbral = 1.0e-8;
+    n = size; n_dist = sizeR; maxiter = size; umbral = 1.0e-8;
     CreateDoubles (&res, n_dist); CreateDoubles (&z, n_dist); 
     CreateDoubles (&d, n_dist);  
 #if PRECOND
@@ -45,7 +42,8 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     CreateDoubles (&diags, n_dist);
     GetDiagonalSparseMatrix2 (mat, dspls[myId], diags, posd);
 #pragma omp parallel for
-    for (i=0; i<n_dist; i++) diags[i] = DONE / diags[i];
+    for (i=0; i<n_dist; i++) 
+        diags[i] = DONE / diags[i];
 #endif
     CreateDoubles (&aux, n); 
 
@@ -60,10 +58,9 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
 
     iter = 0;
-
-    MPI_Allgatherv (x, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
-    InitDoubles (z, n_dist, DZERO, DZERO);
-    ProdSparseMatrixVectorByRows (mat, 0, aux, z);            			// z = A * x
+    MPI_Allgatherv (x, sizeR, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
+    InitDoubles (z, sizeR, DZERO, DZERO);
+    ProdSparseMatrixVectorByRows_OMP (mat, 0, aux, z);            			// z = A * x
     dcopy (&n_dist, b, &IONE, res, &IONE);                          		// res = b
     daxpy (&n_dist, &DMONE, z, &IONE, res, &IONE);                      // res -= z
 #if PRECOND
@@ -73,22 +70,8 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
     dcopy (&n_dist, y, &IONE, d, &IONE);                                // d = y
 
-    // beta = res' * y
-    // ReproAllReduce -- Begin
-    std::vector<int64_t> h_superacc(exblas::BIN_COUNT);
-    exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
-    int imin=exblas::IMIN, imax=exblas::IMAX;
-    exblas::cpu::Normalize(&h_superacc[0], imin, imax);
-    if (myId == 0) {
-        MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    } else {
-        MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    }
-    if (myId == 0) {
-        beta = exblas::cpu::Round( &h_superacc[0] );
-    }
-    MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    // ReproAllReduce -- End
+    beta = ddot (&n_dist, res, &IONE, y, &IONE);                        // beta = res' * y
+    MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     tol = sqrt (beta);
     MPI_Barrier(MPI_COMM_WORLD);
@@ -96,32 +79,18 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         reloj (&t1, &t2);
     while ((iter < maxiter) && (tol > umbral)) {
 
-        MPI_Allgatherv (d, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
-
-        InitDoubles (z, n_dist, DZERO, DZERO);
-        ProdSparseMatrixVectorByRows (mat, 0, aux, z);            		// z = A * d
+        MPI_Allgatherv (d, sizeR, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
+        InitDoubles (z, sizeR, DZERO, DZERO);
+        ProdSparseMatrixVectorByRows_OMP (mat, 0, aux, z);            		// z = A * d
 
         if (myId == 0) 
             printf ("(%d,%20.10e)\n", iter, tol);
 
-        // ReproAllReduce -- Begin
-        exblas::exdot_cpu (n_dist, d, z, &h_superacc[0]);
-        imin=exblas::IMIN, imax=exblas::IMAX;
-        exblas::cpu::Normalize(&h_superacc[0], imin, imax);
-        if (myId == 0) {
-            MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-        } else {
-            MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-        }
-        if (myId == 0) {
-            rho = exblas::cpu::Round( &h_superacc[0] );
-        }
-        MPI_Bcast(&rho, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        // ReproAllReduce -- End
+        rho = ddot (&n_dist, d, &IONE, z, &IONE);            
+        MPI_Allreduce (MPI_IN_PLACE, &rho, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
         rho = beta / rho;
         daxpy (&n_dist, &rho, d, &IONE, x, &IONE);                      	// x += rho * d;
-
         rho = -rho;
         daxpy (&n_dist, &rho, z, &IONE, res, &IONE);                      // res -= rho * z
 
@@ -132,34 +101,20 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
         alpha = beta;                                                 		// alpha = beta
 
-        // beta = res' * y 
-        // ReproAllReduce -- Begin
-        exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
-        imin=exblas::IMIN, imax=exblas::IMAX;
-        exblas::cpu::Normalize(&h_superacc[0], imin, imax);
-        if (myId == 0) {
-            MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-        } else {
-            MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-        }
-        if (myId == 0) {
-            beta = exblas::cpu::Round( &h_superacc[0] );
-        }
-        MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        // ReproAllReduce -- End
+        beta = ddot (&n_dist, res, &IONE, y, &IONE);                      // beta = res' * y                     
+        MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
         alpha = beta / alpha;                                         		// alpha = beta / alpha
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
         daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
 
-        // error
         tol = sqrt (beta);                              									// tol = norm (res)
 
         iter++;
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    if (myId == 0) 
+    if (myId == 0)
         reloj (&t3, &t4);
 
 #if VECTOR_OUTPUT
@@ -170,8 +125,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         for (int ip = 0; ip < n; ip++)
             fprintf(fp, "%20.10e ", aux[ip]);
         fprintf(fp, "\n");
-
-        fclose(fp);
     }
 #endif
 
@@ -193,6 +146,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
 int main (int argc, char **argv) {
     int dim; 
+    double norm = 0.0;
     double *vec = NULL, *sol1 = NULL, *sol2 = NULL;
     int index = 0, indexL = 0;
     SparseMatrix mat  = {0, 0, NULL, NULL, NULL}, sym = {0, 0, NULL, NULL, NULL};
@@ -200,8 +154,10 @@ int main (int argc, char **argv) {
     int root = 0, myId, nProcs;
     int dimL, dspL, *vdimL = NULL, *vdspL = NULL;
     SparseMatrix matL = {0, 0, NULL, NULL, NULL};
-    double *vecL = NULL, *sol1L = NULL, *sol2L = NULL, *rbuf = NULL;
+    double normL = 0.0;
+    double *vecL = NULL, *sol1L = NULL, *sol2L = NULL;
     int mat_from_file, nodes, size_param, stencil_points;
+
     if (argc == 3) {
         mat_from_file = atoi(argv[2]);
     } else {
@@ -257,11 +213,9 @@ int main (int argc, char **argv) {
         CreateDoubles (&vec , dim);
         CreateDoubles (&sol1, dim);
         CreateDoubles (&sol2, dim);
-        CreateDoubles (&rbuf, nProcs);
         InitRandDoubles (vec, dim, -1.0, 1.0);
         InitDoubles (sol1, dim, 0.0, 0.0);
         InitDoubles (sol2, dim, 0.0, 0.0);
-        InitDoubles (rbuf , nProcs, 0.0, 0.0);
     } else {
         CreateDoubles (&vec , dim);
         CreateDoubles (&sol2, dim);
@@ -277,13 +231,12 @@ int main (int argc, char **argv) {
 
     /***************************************/
 
-    int i;
+    int i, IONE = 1;
     double beta;
     if (myId == root) {
         InitDoubles (vec, dim, 1.0, 0.0);
         InitDoubles (sol1, dim, 0.0, 0.0);
         InitDoubles (sol2, dim, 0.0, 0.0);
-        //  ProdSparseMatrixVectorByRows (mat, 0, vec, sol1);
     }
     int k=0;
     int *vptrM = matL.vptr;
@@ -296,30 +249,17 @@ int main (int argc, char **argv) {
 
     MPI_Scatterv (sol2, vdimL, vdspL, MPI_DOUBLE, sol2L, dimL, MPI_DOUBLE, root, MPI_COMM_WORLD);
 
-    ConjugateGradient (matL, sol2L, sol1L, vdimL, vdspL, rbuf, myId);
+    ConjugateGradient (matL, sol2L, sol1L, vdimL, vdspL, myId);
 
     // Error computation
     for (i=0; i<dimL; i++) sol2L[i] -= 1.0;
 
-    // ReproAllReduce -- Begin
-    std::vector<int64_t> h_superacc(exblas::BIN_COUNT);
-    exblas::exdot_cpu (dimL, sol2L, sol2L, &h_superacc[0]);
-    int imin=exblas::IMIN, imax=exblas::IMAX;
-    exblas::cpu::Normalize(&h_superacc[0], imin, imax);
-    if (myId == 0) {
-        MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    } else {
-        MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    }
-    if (myId == 0) {
-        beta = exblas::cpu::Round( &h_superacc[0] );
-    }
-    MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    // ReproAllReduce -- End
+    beta = ddot (&dimL, sol2L, &IONE, sol2L, &IONE);            
+    MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     beta = sqrt(beta);
     if (myId == 0) 
-        printf ("Error: %10.5e\n", beta);
+        printf ("error = %10.5e\n", beta);
 
     /***************************************/
     // Freeing memory
