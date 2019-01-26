@@ -20,6 +20,7 @@
 // ================================================================================
 
 #define PRECOND 1
+#define VECTOR_OUTPUT 0
 #define N 3
 
 /* 
@@ -71,6 +72,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
     CreateDoubles (&aux, n); 
 
+#if VECTOR_OUTPUT
     // write to file for testing purpose
     FILE *fp;
     if (myId == 0) {
@@ -78,16 +80,13 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         sprintf(name, "%d.txt", nProcs);
         fp = fopen(name,"w");
     }
+#endif
 
-    // if (myId == 0) 
-    //     reloj (&t1, &t2);
     iter = 0;
-    // reloj (&p1, &p2);
 
     MPI_Allgatherv (x, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
     InitDoubles (z, n_dist, DZERO, DZERO);
     ProdSparseMatrixVectorByRows (mat, 0, aux, z);            			// z = A * x
-    // reloj (&p3, &p4); pp1 = (p3 - p1); pp2 = (p4 - p2);
     dcopy (&n_dist, b, &IONE, res, &IONE);                          		// res = b
     daxpy (&n_dist, &DMONE, z, &IONE, res, &IONE);                      // res -= z
 #if PRECOND
@@ -97,7 +96,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
     dcopy (&n_dist, y, &IONE, d, &IONE);                                // d = y
 
-    //beta = ddot (&n_dist, res, &IONE, y, &IONE);                        // beta = res' * y
+    // beta = res' * y
     // ReproAllReduce -- Begin
     std::vector<double> fpe(N);
     exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
@@ -119,7 +118,8 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
     tol = sqrt (beta);
     MPI_Barrier(MPI_COMM_WORLD);
-    if (myId == 0) reloj (&t1, &t2);
+    if (myId == 0) 
+        reloj (&t1, &t2);
     while ((iter < maxiter) && (tol > umbral)) {
 
         MPI_Allgatherv (d, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
@@ -130,7 +130,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         if (myId == 0) 
             printf ("(%d,%20.10e)\n", iter, tol);
 
-        //rho = ddot (&n_dist, d, &IONE, z, &IONE);
         // ReproAllReduce -- Begin
         exblas::exdot_cpu (n_dist, d, z, &fpe[0]);
         if (myId == 0) {
@@ -157,7 +156,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
         alpha = beta;                                                 		// alpha = beta
 
-        //beta = ddot (&n_dist, res, &IONE, y, &IONE);                      // beta = res' * y                     
+        // beta = res' * y 
         // ReproAllReduce -- Begin
         exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
         if (myId == 0) {
@@ -185,6 +184,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     if (myId == 0) 
         reloj (&t3, &t4);
 
+#if VECTOR_OUTPUT
     // print aux
     MPI_Allgatherv (x, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
     if (myId == 0) {
@@ -192,10 +192,11 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         for (int ip = 0; ip < n; ip++)
             fprintf(fp, "%20.10e ", aux[ip]);
         fprintf(fp, "\n");
-    }
 
-    if (myId == 0)
         fclose(fp);
+    }
+#endif
+
     if (myId == 0) {
         printf ("Size: %d \n", n);
         printf ("Iter: %d \n", iter);
@@ -203,11 +204,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         printf ("Time_loop: %20.10e\n", (t3-t1));
         printf ("Time_iter: %20.10e\n", (t3-t1)/iter);
     }
-
-
-    //if (myId == 0)
-    //    printf ("Fin(%d) --> (%d,%20.10e) tiempo (%20.10e,%20.10e) prod (%20.10e,%20.10e)\n", 
-    //            n, iter, tol, t3-t1, t4-t2, pp1, pp2);
 
     MPI_Op_free( &Op );
 
@@ -322,7 +318,6 @@ int main (int argc, char **argv) {
         k++;
     }
 
-    //MPI_Scatterv (sol1, vdimL, vdspL, MPI_DOUBLE, sol1L, dimL, MPI_DOUBLE, root, MPI_COMM_WORLD);
     MPI_Scatterv (sol2, vdimL, vdspL, MPI_DOUBLE, sol2L, dimL, MPI_DOUBLE, root, MPI_COMM_WORLD);
 
     ConjugateGradient (matL, sol2L, sol1L, vdimL, vdspL, rbuf, myId);
@@ -330,7 +325,6 @@ int main (int argc, char **argv) {
     // Error computation
     for (i=0; i<dimL; i++) sol2L[i] -= 1.0;
 
-    //beta = ddot (&dimL, sol2L, &IONE, sol2L, &IONE); 
     // ReproAllReduce -- Begin
     std::vector<double> fpe(N);
     exblas::exdot_cpu (dimL, sol2L, sol2L, &fpe[0]);
