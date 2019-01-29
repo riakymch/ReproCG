@@ -90,7 +90,28 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // ReproAllReduce -- End
 
+    // compute tolerance
+#if PRECOND
+    // tol = res' * res
+    // ReproAllReduce -- Begin
+    exblas::exdot_cpu (n_dist, res, res, &h_superacc[0]);
+    exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+    if (myId == 0) {
+        MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    } else {
+        MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
+    if (myId == 0) {
+        tol = exblas::cpu::Round( &h_superacc[0] );
+    }
+    MPI_Bcast(&tol, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // ReproAllReduce -- End
+
+    tol = sqrt (tol);
+#else
     tol = sqrt (beta);
+#endif
+
     MPI_Barrier(MPI_COMM_WORLD);
     if (myId == 0) 
         reloj (&t1, &t2);
@@ -152,8 +173,28 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
         daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
 
-        // error
-        tol = sqrt (beta);                              									// tol = norm (res)
+        // compute tolerance
+#if PRECOND
+        // tol = res' * res
+        // ReproAllReduce -- Begin
+        exblas::exdot_cpu (n_dist, res, res, &h_superacc[0]);
+        int imin=exblas::IMIN, imax=exblas::IMAX;
+        exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+        if (myId == 0) {
+            MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        }
+        if (myId == 0) {
+            tol = exblas::cpu::Round( &h_superacc[0] );
+        }
+        MPI_Bcast(&tol, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        // ReproAllReduce -- End
+
+        tol = sqrt (tol);
+#else
+        tol = sqrt (beta);
+#endif
 
         iter++;
     }
