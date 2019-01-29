@@ -73,7 +73,16 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     beta = ddot (&n_dist, res, &IONE, y, &IONE);                        // beta = res' * y
     MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
+    // tolerance
+#if PRECOND
+    tol = ddot (&n_dist, res, &IONE, res, &IONE);                        // tol = res' * res
+    MPI_Allreduce (MPI_IN_PLACE, &tol, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    tol = sqrt (tol);
+#else
     tol = sqrt (beta);
+#endif
+
     MPI_Barrier(MPI_COMM_WORLD);
     if (myId == 0) 
         reloj (&t1, &t2);
@@ -108,7 +117,15 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
         daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
 
-        tol = sqrt (beta);                              									// tol = norm (res)
+        // tolerance
+#if PRECOND
+        tol = ddot (&n_dist, res, &IONE, res, &IONE);                        // tol = res' * res
+        MPI_Allreduce (MPI_IN_PLACE, &tol, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+        tol = sqrt (tol);
+#else
+        tol = sqrt (beta);
+#endif
 
         iter++;
     }
