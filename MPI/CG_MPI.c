@@ -110,21 +110,40 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
         alpha = beta;                                                 		// alpha = beta
 
+#if PRECOND
+        /*tol = ddot (&n_dist, res, &IONE, res, &IONE);                        // tol = res' * res
+        MPI_Allreduce (MPI_IN_PLACE, &tol, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+        tol = sqrt (tol);*/
+        double reduce[2];
+
+        beta = ddot (&n_dist, res, &IONE, y, &IONE);
+        tol = ddot (&n_dist, res, &IONE, res, &IONE);
+
+        reduce[0] = beta;
+        reduce[1] = tol;
+
+        MPI_Allreduce(MPI_IN_PLACE, reduce, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      
+        beta = reduce[0];
+        tol = reduce[1];
+
+        tol = sqrt (tol);
+
+        alpha = beta / alpha;                                                   // alpha = beta / alpha
+        dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
+        daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
+
+#else
         beta = ddot (&n_dist, res, &IONE, y, &IONE);                      // beta = res' * y                     
         MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
+        
+        tol = sqrt (beta);
+        
         alpha = beta / alpha;                                         		// alpha = beta / alpha
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
         daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
 
-        // tolerance
-#if PRECOND
-        tol = ddot (&n_dist, res, &IONE, res, &IONE);                        // tol = res' * res
-        MPI_Allreduce (MPI_IN_PLACE, &tol, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-        tol = sqrt (tol);
-#else
-        tol = sqrt (beta);
 #endif
 
         iter++;
