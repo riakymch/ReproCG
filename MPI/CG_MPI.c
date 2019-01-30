@@ -92,7 +92,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
     // merge two superaccs into one for reduction
     for (int i = 0; i < exblas::BIN_COUNT; i++) {
-        h_superacc[exblas::IMAX + i] = h_superacc_tol[i]; 
+        h_superacc[exblas::BIN_COUNT + i] = h_superacc_tol[i]; 
     } 
 
     if (myId == 0) {
@@ -103,7 +103,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     if (myId == 0) {
         // split them back
         for (int i = 0; i < exblas::BIN_COUNT; i++) {
-            h_superacc_tol[i] = h_superacc[exblas::IMAX + i]; 
+            h_superacc_tol[i] = h_superacc[exblas::BIN_COUNT + i]; 
         } 
         vAux[0] = exblas::cpu::Round( &h_superacc[0] );
         vAux[1] = exblas::cpu::Round( &h_superacc_tol[0] );
@@ -163,9 +163,11 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         // ReproAllReduce -- End
 
         rho = beta / rho;
+        // TODO: replace with fma
         daxpy (&n_dist, &rho, d, &IONE, x, &IONE);                      	// x += rho * d;
 
         rho = -rho;
+        // TODO: replace with fma
         daxpy (&n_dist, &rho, z, &IONE, res, &IONE);                      // res -= rho * z
 
 #if PRECOND
@@ -190,7 +192,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
         // merge two superaccs into one for reduction
         for (int i = 0; i < exblas::BIN_COUNT; i++) {
-            h_superacc[exblas::IMAX + i] = h_superacc_tol[i]; 
+            h_superacc[exblas::BIN_COUNT + i] = h_superacc_tol[i]; 
         } 
 
         if (myId == 0) {
@@ -201,7 +203,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         if (myId == 0) {
             // split them back
             for (int i = 0; i < exblas::BIN_COUNT; i++) {
-                h_superacc_tol[i] = h_superacc[exblas::IMAX + i]; 
+                h_superacc_tol[i] = h_superacc[exblas::BIN_COUNT + i]; 
             } 
             vAux[0] = exblas::cpu::Round( &h_superacc[0] );
             vAux[1] = exblas::cpu::Round( &h_superacc_tol[0] );
