@@ -19,7 +19,7 @@
 #define VECTOR_OUTPUT 0
 
 void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int *dspls, int myId) {
-    int size = mat.dim2, sizeR = mat.dim1, sizeC = mat.dim2; 
+    int size = mat.dim2, sizeR = mat.dim1; 
     int IONE = 1; 
     double DONE = 1.0, DMONE = -1.0, DZERO = 0.0;
     int n, n_dist, iter, maxiter, nProcs;
@@ -70,16 +70,24 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
     dcopy (&n_dist, y, &IONE, d, &IONE);                                // d = y
 
-    beta = ddot (&n_dist, res, &IONE, y, &IONE);                        // beta = res' * y
-    MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-    // tolerance
+    double reduce[2];
 #if PRECOND
-    tol = ddot (&n_dist, res, &IONE, res, &IONE);                        // tol = res' * res
-    MPI_Allreduce (MPI_IN_PLACE, &tol, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    beta = ddot (&n_dist, res, &IONE, y, &IONE);
+    tol = ddot (&n_dist, res, &IONE, res, &IONE);
+
+    reduce[0] = beta;
+    reduce[1] = tol;
+
+    MPI_Allreduce(MPI_IN_PLACE, reduce, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  
+    beta = reduce[0];
+    tol = reduce[1];
 
     tol = sqrt (tol);
 #else
+    beta = ddot (&n_dist, res, &IONE, res, &IONE);                        // tol = res' * res
+    MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
     tol = sqrt (beta);
 #endif
 
@@ -111,12 +119,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         alpha = beta;                                                 		// alpha = beta
 
 #if PRECOND
-        /*tol = ddot (&n_dist, res, &IONE, res, &IONE);                        // tol = res' * res
-        MPI_Allreduce (MPI_IN_PLACE, &tol, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-        tol = sqrt (tol);*/
-        double reduce[2];
-
         beta = ddot (&n_dist, res, &IONE, y, &IONE);
         tol = ddot (&n_dist, res, &IONE, res, &IONE);
 
@@ -129,22 +131,16 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         tol = reduce[1];
 
         tol = sqrt (tol);
-
-        alpha = beta / alpha;                                                   // alpha = beta / alpha
-        dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
-        daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
-
 #else
         beta = ddot (&n_dist, res, &IONE, y, &IONE);                      // beta = res' * y                     
         MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
         
         tol = sqrt (beta);
-        
-        alpha = beta / alpha;                                         		// alpha = beta / alpha
+#endif
+
+        alpha = beta / alpha;                                                   // alpha = beta / alpha
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
         daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
-
-#endif
 
         iter++;
     }
@@ -182,7 +178,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
 int main (int argc, char **argv) {
     int dim; 
-    double norm = 0.0;
     double *vec = NULL, *sol1 = NULL, *sol2 = NULL;
     int index = 0, indexL = 0;
     SparseMatrix mat  = {0, 0, NULL, NULL, NULL}, sym = {0, 0, NULL, NULL, NULL};
@@ -190,7 +185,6 @@ int main (int argc, char **argv) {
     int root = 0, myId, nProcs;
     int dimL, dspL, *vdimL = NULL, *vdspL = NULL;
     SparseMatrix matL = {0, 0, NULL, NULL, NULL};
-    double normL = 0.0;
     double *vecL = NULL, *sol1L = NULL, *sol2L = NULL;
     int mat_from_file, nodes, size_param, stencil_points;
 
