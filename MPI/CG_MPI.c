@@ -29,7 +29,8 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     double beta, tol, rho, alpha, umbral;
     double *res = NULL, *z = NULL, *d = NULL, *y = NULL;
     double *aux = NULL;
-    double t1, t2, t3, t4;
+    //double t1, t2, t3, t4;
+    double t1, t2, t3, t4, tAs1, tAs2, tAe1, tAe2, tRs1, tRs2, tRe1, tRe2, tRs3, tRs4, tRe3, tRe4, tRs5, tRs6, tRe5, tRe6;
 #if PRECOND
     int i, *posd = NULL;
     double *diags = NULL;
@@ -75,7 +76,9 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
     // beta = res' * y
     // ReproAllReduce -- Begin
-    std::vector<int64_t> h_superacc(exblas::BIN_COUNT);
+    double vAux[2];
+    std::vector<int64_t> h_superacc(2 * exblas::BIN_COUNT);
+    std::vector<int64_t> h_superacc_tol(exblas::BIN_COUNT);
     exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
     int imin=exblas::IMIN, imax=exblas::IMAX;
     exblas::cpu::Normalize(&h_superacc[0], imin, imax);
@@ -90,28 +93,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // ReproAllReduce -- End
 
-    // compute tolerance
-#if PRECOND
-    // tol = res' * res
-    // ReproAllReduce -- Begin
-    exblas::exdot_cpu (n_dist, res, res, &h_superacc[0]);
-    exblas::cpu::Normalize(&h_superacc[0], imin, imax);
-    if (myId == 0) {
-        MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    } else {
-        MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    }
-    if (myId == 0) {
-        tol = exblas::cpu::Round( &h_superacc[0] );
-    }
-    MPI_Bcast(&tol, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    // ReproAllReduce -- End
-
-    tol = sqrt (tol);
-#else
     tol = sqrt (beta);
-#endif
-
     MPI_Barrier(MPI_COMM_WORLD);
     if (myId == 0) 
         reloj (&t1, &t2);
@@ -153,6 +135,45 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
         alpha = beta;                                                 		// alpha = beta
 
+#if PRECOND
+
+        // ReproAllReduce -- Begin
+        // beta = res' * y 
+        exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
+        imin=exblas::IMIN, imax=exblas::IMAX;
+        exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+
+        // compute tolerance
+        //     tol = res' * res
+        exblas::exdot_cpu (n_dist, res, res, &h_superacc_tol[0]);
+        imin=exblas::IMIN, imax=exblas::IMAX;
+        exblas::cpu::Normalize(&h_superacc_tol[0], imin, imax);
+
+        // merge two superaccs into one for reduction
+        for (int i = 0; i < exblas::BIN_COUNT; i++) {
+            h_superacc[exblas::IMAX + i] = h_superacc_tol[i]; 
+        } 
+
+        if (myId == 0) {
+            MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], 2*exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Reduce (&h_superacc[0], NULL, 2*exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        }
+        if (myId == 0) {
+            // split them back
+            for (int i = 0; i < exblas::BIN_COUNT; i++) {
+                h_superacc_tol[i] = h_superacc[exblas::IMAX + i]; 
+            } 
+            vAux[0] = exblas::cpu::Round( &h_superacc[0] );
+            vAux[1] = exblas::cpu::Round( &h_superacc_tol[0] );
+        }
+        MPI_Bcast(vAux, 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	    beta = vAux[0]; 
+	    tol  = vAux[1]; 
+        // ReproAllReduce -- End
+    	
+        tol = sqrt (tol);
+#else
         // beta = res' * y 
         // ReproAllReduce -- Begin
         exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
@@ -169,32 +190,13 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         // ReproAllReduce -- End
 
+        // compute tolerance
+        tol = sqrt (beta);
+#endif
+
         alpha = beta / alpha;                                         		// alpha = beta / alpha
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
         daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
-
-        // compute tolerance
-#if PRECOND
-        // tol = res' * res
-        // ReproAllReduce -- Begin
-        exblas::exdot_cpu (n_dist, res, res, &h_superacc[0]);
-        int imin=exblas::IMIN, imax=exblas::IMAX;
-        exblas::cpu::Normalize(&h_superacc[0], imin, imax);
-        if (myId == 0) {
-            MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-        } else {
-            MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-        }
-        if (myId == 0) {
-            tol = exblas::cpu::Round( &h_superacc[0] );
-        }
-        MPI_Bcast(&tol, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        // ReproAllReduce -- End
-
-        tol = sqrt (tol);
-#else
-        tol = sqrt (beta);
-#endif
 
         iter++;
     }
