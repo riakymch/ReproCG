@@ -98,11 +98,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         reloj (&t1, &t2);
     while ((iter < maxiter) && (tol > umbral)) {
 
-    	if (myId == 0) 
-        	reloj (&tAs1, &tAs2);
         MPI_Allgatherv (d, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
-    	if (myId == 0) 
-        	reloj (&tAe1, &tAe2);
 
         InitDoubles (z, n_dist, DZERO, DZERO);
         ProdSparseMatrixVectorByRows (mat, 0, aux, z);            		// z = A * d
@@ -111,8 +107,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
             printf ("(%d,%20.10e)\n", iter, tol);
 
         // ReproAllReduce -- Begin
-    	if (myId == 0) 
-        	reloj (&tRs1, &tRs2);
+    	
         exblas::exdot_cpu (n_dist, d, z, &h_superacc[0]);
         imin=exblas::IMIN, imax=exblas::IMAX;
         exblas::cpu::Normalize(&h_superacc[0], imin, imax);
@@ -125,8 +120,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
             rho = exblas::cpu::Round( &h_superacc[0] );
         }
         MPI_Bcast(&rho, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    	if (myId == 0) 
-        	reloj (&tRe1, &tRe2);
+    	
         // ReproAllReduce -- End
 
         rho = beta / rho;
@@ -145,8 +139,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #if PRECOND
         // beta = res' * y 
         // ReproAllReduce -- Begin
-    	if (myId == 0) 
-        	reloj (&tRs3, &tRs4);
+    	
         exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
         imin=exblas::IMIN, imax=exblas::IMAX;
         exblas::cpu::Normalize(&h_superacc[0], imin, imax);
@@ -183,8 +176,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 	beta = vAux[0]; 
 	tol  = vAux[1]; 
         // ReproAllReduce -- End
-    	if (myId == 0) 
-        	reloj (&tRe3, &tRe4);
+    	
 
         alpha = beta / alpha;                                         		// alpha = beta / alpha
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
@@ -194,8 +186,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #else
         // beta = res' * y 
         // ReproAllReduce -- Begin
-    	if (myId == 0) 
-        	reloj (&tRs3, &tRs4);
+    	
         exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
         imin=exblas::IMIN, imax=exblas::IMAX;
         exblas::cpu::Normalize(&h_superacc[0], imin, imax);
@@ -208,8 +199,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
             beta = exblas::cpu::Round( &h_superacc[0] );
         }
         MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    	if (myId == 0) 
-        	reloj (&tRe3, &tRe4);
+    	
         // ReproAllReduce -- End
 
         alpha = beta / alpha;                                         		// alpha = beta / alpha
@@ -245,9 +235,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         printf ("Tol: %20.10e \n", tol);
         printf ("Time_loop: %20.10e\n", (t3-t1));
         printf ("Time_iter: %20.10e\n", (t3-t1)/iter);
-        printf ("Time_AllGather: %20.10e\n", (tAe1-tAs1));
-        printf ("Time_AllReduce1: %20.10e\n", (tRe1-tRs1));
-        printf ("Time_AllReduce2: %20.10e\n", (tRe3-tRs3));
     }
 
     RemoveDoubles (&aux); RemoveDoubles (&res); RemoveDoubles (&z); RemoveDoubles (&d);
