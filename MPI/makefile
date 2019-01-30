@@ -83,9 +83,9 @@ CG_MPI_opt: CG_MPI.o ToolsMPI.o matrix.o
 	$(CC) $(CFLAGS) -c $*.c
 
 clean:
-	rm -f *.o CG_MPI
+	rm -f *.o CG_MPI_opt
 
 clear:
-	rm -f *.o *.a CG_MPI
+	rm -f *.o *.a CG_MPI_opt
 
 # ============================================================

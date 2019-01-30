@@ -43,6 +43,38 @@ void fpeSum( double *in, double *inout, int *len, MPI_Datatype *dptr ) {
     }
 }
 
+void fpeSum2( double *in, double *inout, int *len, MPI_Datatype *dptr ) { 
+
+    double s;
+    // for the first fpe
+    for (int j = 0; j < N; ++j) { 
+        if (in[j] == 0.0)
+            break;
+
+        for (int i = 0; i < N; ++i) { 
+            inout[i] = exblas::cpu::FMA2Sum(inout[i], in[j], s);
+            in[j] = s;
+            //if(true && i != 0 && !exblas::cpu::horizontal_or(in[j]))
+            if(true && i != 0 && !(in[j] != 0))
+                break;
+        }
+    }
+
+    // for the second fpe
+    for (int j = N; j < *len; ++j) { 
+        if (in[j] == 0.0)
+            return;
+
+        for (int i = N; i < *len; ++i) { 
+            inout[i] = exblas::cpu::FMA2Sum(inout[i], in[j], s);
+            in[j] = s;
+            //if(true && i != 0 && !exblas::cpu::horizontal_or(in[j]))
+            if(true && i != 0 && !(in[j] != 0))
+                break;
+        }
+    }
+}
+
 void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int *dspls, double *rbuf, int myId) {
     int size = mat.dim2, sizeR = mat.dim1; 
     int IONE = 1; 
@@ -96,14 +128,52 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
     dcopy (&n_dist, y, &IONE, d, &IONE);                                // d = y
 
-    // beta = res' * y
-    // ReproAllReduce -- Begin
-    std::vector<double> fpe(N);
-    exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
+    std::vector<double> fpe(2*N);
+    std::vector<double> fpe_tol(N);
+    double vAux[2];
 
     // user-defined reduction operations
-    MPI_Op Op;
+    MPI_Op Op, Op2;
     MPI_Op_create( (MPI_User_function *) fpeSum, 1, &Op ); 
+    MPI_Op_create( (MPI_User_function *) fpeSum2, 1, &Op2 ); 
+
+#if PRECOND
+    // ReproAllReduce -- Begin
+    // beta = res' * y 
+    exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
+    // tol = res' * res 
+    exblas::exdot_cpu (n_dist, res, res, &fpe_tol[0]);
+
+    // merge two fpes
+    for (int i = 0; i < N; i++) { 
+        fpe[N + i] = fpe_tol[i];
+    }
+
+    if (myId == 0) {
+        MPI_Reduce (MPI_IN_PLACE, &fpe[0], 2*N, MPI_DOUBLE, Op2, 0, MPI_COMM_WORLD);
+    } else {
+        MPI_Reduce (&fpe[0], NULL, 2*N, MPI_DOUBLE, Op2, 0, MPI_COMM_WORLD);
+    }
+
+    if (myId == 0) {
+        // split two fpes
+        for (int i = 0; i < N; i++) { 
+            fpe_tol[i] = fpe[N + i];
+        }
+        vAux[0] = exblas::cpu::Round( &fpe[0] );
+        vAux[1] = exblas::cpu::Round( &fpe_tol[0] );
+    }
+    MPI_Bcast(vAux, 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    beta = vAux[0];
+    tol  = vAux[1];
+    // ReproAllReduce -- End
+
+    tol = sqrt (tol);
+#else
+    // beta = res' * y
+    // ReproAllReduce -- Begin
+    exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
+
     if (myId == 0) {
         MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
     } else {
@@ -116,25 +186,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // ReproAllReduce -- End
 
-    // tolerance
-#if PRECOND
-    // ReproAllReduce -- Begin
-    exblas::exdot_cpu (n_dist, res, res, &fpe[0]);
-
-    if (myId == 0) {
-        MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
-    } else {
-        MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
-    }
-
-    if (myId == 0) {
-        tol = exblas::cpu::Round( &fpe[0] );
-    }
-    MPI_Bcast(&tol, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    // ReproAllReduce -- End
-
-    tol = sqrt (tol);
-#else
     tol = sqrt (beta);
 #endif
 
@@ -144,7 +195,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     while ((iter < maxiter) && (tol > umbral)) {
 
         MPI_Allgatherv (d, n_dist, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
-
+    	
         InitDoubles (z, n_dist, DZERO, DZERO);
         ProdSparseMatrixVectorByRows (mat, 0, aux, z);            		// z = A * d
 
@@ -152,6 +203,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
             printf ("(%d,%20.10e)\n", iter, tol);
 
         // ReproAllReduce -- Begin
+    	
         exblas::exdot_cpu (n_dist, d, z, &fpe[0]);
         if (myId == 0) {
             MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
@@ -162,6 +214,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
             rho = exblas::cpu::Round( &fpe[0] );
         }
         MPI_Bcast(&rho, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    	
         // ReproAllReduce -- End
 
         rho = beta / rho;
@@ -177,6 +230,40 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
         alpha = beta;                                                 		// alpha = beta
 
+        // user-defined reduction operations
+#if PRECOND
+        // ReproAllReduce -- Begin
+        // beta = res' * y 
+        exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
+        // tol = res' * res 
+        exblas::exdot_cpu (n_dist, res, res, &fpe_tol[0]);
+
+        // merge two fpes
+        for (int i = 0; i < N; i++) { 
+            fpe[N + i] = fpe_tol[i];
+        }
+    
+        if (myId == 0) {
+            MPI_Reduce (MPI_IN_PLACE, &fpe[0], 2*N, MPI_DOUBLE, Op2, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Reduce (&fpe[0], NULL, 2*N, MPI_DOUBLE, Op2, 0, MPI_COMM_WORLD);
+        }
+
+        if (myId == 0) {
+            // split two fpes
+            for (int i = 0; i < N; i++) { 
+                fpe_tol[i] = fpe[N + i];
+            }
+            vAux[0] = exblas::cpu::Round( &fpe[0] );
+            vAux[1] = exblas::cpu::Round( &fpe_tol[0] );
+        }
+        MPI_Bcast(vAux, 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        beta = vAux[0];
+        tol  = vAux[1];
+        // ReproAllReduce -- End
+
+        tol = sqrt (tol);
+#else
         // beta = res' * y 
         // ReproAllReduce -- Begin
         exblas::exdot_cpu (n_dist, res, y, &fpe[0]);
@@ -191,34 +278,12 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         // ReproAllReduce -- End
 
+        tol = sqrt (beta);
+#endif
+
         alpha = beta / alpha;                                         		// alpha = beta / alpha
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
         daxpy (&n_dist, &DONE, y, &IONE, d, &IONE);                       // d += y
-
-        // tolerance
-#if PRECOND
-        // ReproAllReduce -- Begin
-        exblas::exdot_cpu (n_dist, res, res, &fpe[0]);
-
-        // user-defined reduction operations
-        MPI_Op Op;
-        MPI_Op_create( (MPI_User_function *) fpeSum, 1, &Op ); 
-        if (myId == 0) {
-            MPI_Reduce (MPI_IN_PLACE, &fpe[0], N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
-        } else {
-            MPI_Reduce (&fpe[0], NULL, N, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
-        }
-
-        if (myId == 0) {
-            tol = exblas::cpu::Round( &fpe[0] );
-        }
-        MPI_Bcast(&tol, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-        // ReproAllReduce -- End
-
-        tol = sqrt (tol);
-#else
-        tol = sqrt (beta);
-#endif
 
         iter++;
     }
@@ -249,6 +314,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     }
 
     MPI_Op_free( &Op );
+    MPI_Op_free( &Op2 );
 
     RemoveDoubles (&aux); RemoveDoubles (&res); RemoveDoubles (&z); RemoveDoubles (&d);
 #if PRECOND
