@@ -30,7 +30,13 @@ namespace cpu{
 
 template<typename CACHE, typename PointerOrValue1, typename PointerOrValue2>
 void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, double* fpe) {
+    // declare fpe for accumulating errors
+    double fperr[N];
+    for(int i = 0; i < N; i++) {
+        fperr[i] = 0.0;
+    }
     CACHE cache(fpe);
+    CACHE cacherr(fperr);
 #ifndef _WITHOUT_VCL
     int r = (( int64_t(N) ) & ~7ul);
     for(int i = 0; i < r; i+=8) {
@@ -40,23 +46,28 @@ void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, double* fpe) {
         vcl::Vec8d r1 ;
         vcl::Vec8d x  = TwoProductFMA(make_vcl_vec8d(a,i), make_vcl_vec8d(b,i), r1);
         cache.Accumulate(x);
-        cache.Accumulate(r1);
+        cacherr.Accumulate(r1);
     }
     if( r != N) {
         //accumulate remainder
         vcl::Vec8d r1;
         vcl::Vec8d x  = TwoProductFMA(make_vcl_vec8d(a,r,N-r), make_vcl_vec8d(b,r,N-r), r1);
         cache.Accumulate(x);
-        cache.Accumulate(r1);
+        cacherr.Accumulate(r1);
     }
 #else// _WITHOUT_VCL
     for(int i = 0; i < N; i++) {
         double r1;
         double x = TwoProductFMA(a[i],b[i],r1);
         cache.Accumulate(x);
-        cache.Accumulate(r1);
+        cacherr.Accumulate(r1);
     }
 #endif// _WITHOUT_VCL
+
+    // merge fpe and fperr
+    for(int i = 0; i < N; i++) {
+        cache.Accumulate(fperr[i]);
+    }
 }
 }//namespace cpu
 ///@endcond
