@@ -90,7 +90,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
 
     MPI_Comm_size(MPI_COMM_WORLD, &nProcs);
-    n = size; n_dist = sizeR; maxiter = 500; umbral = 1.0e-8;
+    n = size; n_dist = sizeR; maxiter = size; umbral = 1.0e-8;
     //n = size; n_dist = sizeR; maxiter = size; umbral = 1.0e-8;
     CreateDoubles (&res, n_dist); CreateDoubles (&z, n_dist); 
     CreateDoubles (&d, n_dist);  
@@ -203,7 +203,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
             printf ("(%d,%20.10e)\n", iter, tol);
 
         // ReproAllReduce -- Begin
-    	
         exblas::exdot_cpu<double*, double*, NBFPE> (n_dist, d, z, &fpe[0]);
         if (myId == 0) {
             MPI_Reduce (MPI_IN_PLACE, &fpe[0], NBFPE, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
@@ -214,7 +213,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
             rho = exblas::cpu::Round( &fpe[0] );
         }
         MPI_Bcast(&rho, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    	
         // ReproAllReduce -- End
 
         rho = beta / rho;
@@ -382,6 +380,9 @@ int main (int argc, char **argv) {
                 dimL, nodes, size_param, band_width, stencil_points, nnz_here);
         allocate_matrix(dimL, dim, nnz_here, &matL);
         generate_Poisson3D_filled(&matL, size_param, stencil_points, band_width, dspL, dimL, dim);
+        // To generate ill-conditioned matrices
+//        double factor = 1.0e6;
+//        ScaleFirstRowCol(matL, dspL, dimL, myId, root, factor);
     }
     MPI_Barrier(MPI_COMM_WORLD);
 

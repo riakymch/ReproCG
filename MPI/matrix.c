@@ -422,6 +422,24 @@ void allocate_matrix(const int m, const int n, const int nnz, ptr_SparseMatrix A
 	}
 	fprintf(stderr, "Matrix allocated\n");
 }
+
+void ScaleFirstRowCol(SparseMatrix A, int despL, int dimL, int myId, int root, double factor){   
+// To generate ill-conditioned matrices
+  int i;
+
+  if (myId == root) {
+    for (i=A.vptr[0]; i< A.vptr[1]; i++)
+       A.vval[i] *= factor;
+  }
+  if (despL == 0) {
+    i = 0;
+    while((i < dimL) && (A.vpos[A.vptr[i]] == 0)) {
+      A.vval[A.vptr[i]] *= factor;
+      i++;
+    }
+  }
+}
+
 /*
 void deallocate_matrix(Matrix *A)
 {
