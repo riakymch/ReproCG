@@ -13,6 +13,33 @@
 #include "ToolsMPI.h"
 #include "matrix.h"
 
+#include <cstddef>
+#include <mpfr.h>
+
+double dot_mpfr(int *N, double *a, int *inca, double *b, int *incb) {
+    mpfr_t sum, dot, op;
+    mpfr_init2(op, 64);
+    mpfr_init2(dot, 128);
+    mpfr_init2(sum, 2048);
+
+    mpfr_set_zero(dot, 0.0);
+    mpfr_set_zero(sum, 0.0);
+
+    for (int i = 0; i < *N; i++) {
+        mpfr_set_d(op, a[i], MPFR_RNDN);
+        mpfr_mul_d(dot, op, b[i], MPFR_RNDN);
+        mpfr_add(sum, sum, dot, MPFR_RNDN);
+    }
+    double dacc = mpfr_get_d(sum, MPFR_RNDN);
+
+    mpfr_clear(op);
+    mpfr_clear(dot);
+    mpfr_clear(sum);
+    mpfr_free_cache();
+
+    return dacc;
+}
+
 // ================================================================================
 
 #define PRECOND 1
@@ -70,23 +97,13 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
     dcopy (&n_dist, y, &IONE, d, &IONE);                                // d = y
 
-    double reduce[2];
 #if PRECOND
-    beta = ddot (&n_dist, res, &IONE, y, &IONE);
-    tol = ddot (&n_dist, res, &IONE, res, &IONE);
-
-    reduce[0] = beta;
-    reduce[1] = tol;
-
-    MPI_Allreduce(MPI_IN_PLACE, reduce, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  
-    beta = reduce[0];
-    tol = reduce[1];
+    beta = dot_mpfr (&n_dist, res, &IONE, y, &IONE);
+    tol = dot_mpfr (&n_dist, res, &IONE, res, &IONE);
 
     tol = sqrt (tol);
 #else
-    beta = ddot (&n_dist, res, &IONE, res, &IONE);                        // tol = res' * res
-    MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    beta = dot_mpfr (&n_dist, res, &IONE, res, &IONE);                        // tol = res' * res
 
     tol = sqrt (beta);
 #endif
@@ -103,8 +120,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         if (myId == 0) 
             printf ("(%d,%20.10e)\n", iter, tol);
 
-        rho = ddot (&n_dist, d, &IONE, z, &IONE);            
-        MPI_Allreduce (MPI_IN_PLACE, &rho, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        rho = dot_mpfr (&n_dist, d, &IONE, z, &IONE);            
 
         rho = beta / rho;
         daxpy (&n_dist, &rho, d, &IONE, x, &IONE);                      	// x += rho * d;
@@ -119,21 +135,12 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         alpha = beta;                                                 		// alpha = beta
 
 #if PRECOND
-        beta = ddot (&n_dist, res, &IONE, y, &IONE);
-        tol = ddot (&n_dist, res, &IONE, res, &IONE);
-
-        reduce[0] = beta;
-        reduce[1] = tol;
-
-        MPI_Allreduce(MPI_IN_PLACE, reduce, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-      
-        beta = reduce[0];
-        tol = reduce[1];
+        beta = dot_mpfr (&n_dist, res, &IONE, y, &IONE);
+        tol = dot_mpfr (&n_dist, res, &IONE, res, &IONE);
 
         tol = sqrt (tol);
 #else
-        beta = ddot (&n_dist, res, &IONE, y, &IONE);                      // beta = res' * y                     
-        MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        beta = dot_mpfr (&n_dist, res, &IONE, y, &IONE);                      // beta = res' * y                     
         
         tol = sqrt (beta);
 #endif
@@ -235,6 +242,9 @@ int main (int argc, char **argv) {
                 dimL, nodes, size_param, band_width, stencil_points, nnz_here);
         allocate_matrix(dimL, dim, nnz_here, &matL);
         generate_Poisson3D_filled(&matL, size_param, stencil_points, band_width, dspL, dimL, dim);
+        // To generate ill-conditioned matrices
+//        double factor = 1.0e6;
+//        ScaleFirstRowCol(matL, dspL, dimL, myId, root, factor);
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -284,9 +294,7 @@ int main (int argc, char **argv) {
     // Error computation
     for (i=0; i<dimL; i++) sol2L[i] -= 1.0;
 
-    beta = ddot (&dimL, sol2L, &IONE, sol2L, &IONE);            
-    MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
+    beta = dot_mpfr (&dimL, sol2L, &IONE, sol2L, &IONE);            
     beta = sqrt(beta);
     if (myId == 0) 
         printf ("Error: %10.5e\n", beta);
