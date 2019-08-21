@@ -25,5 +25,7 @@ void allocate_matrix(const int n, const int m, const int nnz, ptr_SparseMatrix A
 void generate_Poisson3D_filled(ptr_SparseMatrix A, const int p, const int stencil_points, int band_width, int dspL, int dimL, int dim);
 
 void generate_Poisson3D_perm(ptr_SparseMatrix A, const int p, const int stencil_points, int init, int step, int dimL, int dim);
+
+void ScaleFirstRowCol(SparseMatrix A, int despL, int dimL, int myId, int root, double factor);
 #endif // MATRIX_H_INCLUDED
 
