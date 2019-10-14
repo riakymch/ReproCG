@@ -116,11 +116,17 @@ void FPExpansionVect<T,N,TRAITS>::Accumulate(T x)
     if(TRAITS::CheckRangeFirst && horizontal_or(abs(x) < abs(fpe[N-1]))) {
         return;
     }
+
     T s;
     for(unsigned int i = 0; i != N; ++i) {
         fpe[i] = twosum(fpe[i], x, s);
         x = s;
-        if(TRAITS::EarlyExit && i != 0 && !horizontal_or(x)) return;
+        if(TRAITS::EarlyExit && !horizontal_or(x))
+	    return;
+    }
+
+    if (horizontal_or(x)) {
+        fprintf(stderr, "WARN: with the FPE-based implementation we cannot keep every bit of information for this problem due to either high condition number (ill-cond), too broad dynamic range, or both. Thus, we cannot ensure correct-rounding and bitwise reproducibility. Hence, we advise to switch to the ExBLAS-based implementation for this particular (rather rare) case.\n");
     }
 }
 

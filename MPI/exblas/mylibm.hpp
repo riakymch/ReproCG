@@ -178,7 +178,7 @@ inline static bool horizontal_or(vcl::Vec8d const & a) {
 }
 #else
 inline static bool horizontal_or( const double & a){
-    return a!= 0;
+    return a != 0;
 }
 #endif//_WITHOUT_VCL
 

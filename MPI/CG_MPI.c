@@ -37,7 +37,7 @@ void fpeSum( double *in, double *inout, int *len, MPI_Datatype *dptr ) {
             inout[i] = exblas::cpu::FMA2Sum(inout[i], in[j], s);
             in[j] = s;
             //if(true && i != 0 && !exblas::cpu::horizontal_or(in[j]))
-            if(true && i != 0 && !(in[j] != 0))
+            if(true && !(in[j] != 0))
                 break;
         }
     }
@@ -55,7 +55,7 @@ void fpeSum2( double *in, double *inout, int *len, MPI_Datatype *dptr ) {
             inout[i] = exblas::cpu::FMA2Sum(inout[i], in[j], s);
             in[j] = s;
             //if(true && i != 0 && !exblas::cpu::horizontal_or(in[j]))
-            if(true && i != 0 && !(in[j] != 0))
+            if(true && !(in[j] != 0))
                 break;
         }
     }
@@ -69,7 +69,7 @@ void fpeSum2( double *in, double *inout, int *len, MPI_Datatype *dptr ) {
             inout[i] = exblas::cpu::FMA2Sum(inout[i], in[j], s);
             in[j] = s;
             //if(true && i != 0 && !exblas::cpu::horizontal_or(in[j]))
-            if(true && i != 0 && !(in[j] != 0))
+            if(true && !(in[j] != 0))
                 break;
         }
     }
