@@ -55,7 +55,7 @@ OBJS = $(OBJS_CLOCK) $(OBJS_VECTOR) $(OBJS_SPARSE)
 
 # ============================================================
 
-default: libclock.a libvector.a libsparse.a CG_MPI_orig
+default: libclock.a libvector.a libsparse.a CG_MPI
 
 libshared.a : $(OBJS)
 	$(AR) $(ARFLAGS) $@ $?
@@ -73,8 +73,8 @@ libsparse.a : $(OBJS_SPARSE)
 	$(AR) $(ARFLAGS) $@ $?
 	$(RL) $(RLFLAGS) $@
 
-CG_MPI_orig: CG_MPI.o ToolsMPI.o matrix.o 
-	$(CLINKER) $(LDFLAGS) -o CG_MPI_orig CG_MPI.o ToolsMPI.o matrix.o $(LIBMKL) $(LIBLIST)
+CG_MPI: CG_MPI.o ToolsMPI.o matrix.o 
+	$(CLINKER) $(LDFLAGS) -o CG_MPI CG_MPI.o ToolsMPI.o matrix.o $(LIBMKL) $(LIBLIST)
 
 # ============================================================
 
@@ -83,9 +83,9 @@ CG_MPI_orig: CG_MPI.o ToolsMPI.o matrix.o
 	$(CC) $(CFLAGS) -c $*.c
 
 clean:
-	rm -f *.o CG_MPI_orig
+	rm -f *.o CG_MPI
 
 clear:
-	rm -f *.o *.a CG_MPI_orig
+	rm -f *.o *.a CG_MPI
 
 # ============================================================
