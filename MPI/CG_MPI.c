@@ -18,6 +18,7 @@
 
 // ================================================================================
 
+#define DIRECT_ERROR 1
 #define PRECOND 1
 #define VECTOR_OUTPUT 0
 
@@ -39,6 +40,14 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     n = size; n_dist = sizeR; maxiter = size; umbral = 1.0e-8;
     CreateDoubles (&res, n_dist); CreateDoubles (&z, n_dist); 
     CreateDoubles (&d, n_dist);  
+#ifdef DIRECT_ERROR
+    // init exact solution
+    double *res_err = NULL, *x_exact = NULL;
+	CreateDoubles (&x_exact, n_dist);
+	CreateDoubles (&res_err, n_dist);
+    InitDoubles(x_exact, n_dist, DONE, DZERO);
+#endif // DIRECT_ERROR 
+
 #if PRECOND
     CreateDoubles (&y, n_dist);
     CreateInts (&posd, n_dist);
@@ -78,9 +87,9 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     std::vector<int64_t> h_superacc_tol(exblas::BIN_COUNT);
 
 #if PRECOND
-    // ReproAllReduce -- Begin
     // beta = res' * y 
     exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
+    // ReproAllReduce -- Begin
     int imin=exblas::IMIN, imax=exblas::IMAX;
     exblas::cpu::Normalize(&h_superacc[0], imin, imax);
 
@@ -116,8 +125,8 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     tol = sqrt (tol);
 #else
     // beta = res' * y
-    // ReproAllReduce -- Begin
     exblas::exdot_cpu (n_dist, res, y, &h_superacc[0]);
+    // ReproAllReduce -- Begin
     int imin=exblas::IMIN, imax=exblas::IMAX;
     exblas::cpu::Normalize(&h_superacc[0], imin, imax);
     if (myId == 0) {
@@ -134,6 +143,31 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     tol = sqrt (beta);
 #endif
 
+#ifdef DIRECT_ERROR
+    // compute direct error
+    double direct_err;
+	dcopy (&n_dist, x_exact, &IONE, res_err, &IONE);                        // res_err = x_exact
+	daxpy (&n_dist, &DMONE, x, &IONE, res_err, &IONE);                      // res_err -= x
+
+    // direct_err = res_err' * res_err
+    exblas::exdot_cpu (n_dist, res_err, res_err, &h_superacc[0]);
+    // ReproAllReduce -- Begin
+    imin=exblas::IMIN, imax=exblas::IMAX;
+    exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+    if (myId == 0) {
+        MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    } else {
+        MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
+    if (myId == 0) {
+        direct_err = exblas::cpu::Round( &h_superacc[0] );
+    }
+    MPI_Bcast(&direct_err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // ReproAllReduce -- End
+
+    direct_err = sqrt(direct_err);
+#endif // DIRECT_ERROR
+
     MPI_Barrier(MPI_COMM_WORLD);
     if (myId == 0) 
         reloj (&t1, &t2);
@@ -145,7 +179,11 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         ProdSparseMatrixVectorByRows (mat, 0, aux, z);            		// z = A * d
 
         if (myId == 0) 
-            printf ("(%d,%20.10e)\n", iter, tol);
+#ifdef DIRECT_ERROR
+            printf ("%d \t %20.10e \t %20.10e \n", iter, tol, direct_err);
+#else        
+            printf ("%d \t %20.10e \n", iter, tol);
+#endif // DIRECT_ERROR
 
         // ReproAllReduce -- Begin
         exblas::exdot_cpu (n_dist, d, z, &h_superacc[0]);
@@ -234,6 +272,30 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         // compute tolerance
         tol = sqrt (beta);
 #endif
+
+#ifdef DIRECT_ERROR
+        // compute direct error
+        dcopy (&n_dist, x_exact, &IONE, res_err, &IONE);                        // res_err = x_exact
+        daxpy (&n_dist, &DMONE, x, &IONE, res_err, &IONE);                      // res_err -= x
+
+        // direct_err = res_err' * res_err
+        exblas::exdot_cpu (n_dist, res_err, res_err, &h_superacc[0]);
+        // ReproAllReduce -- Begin
+        imin=exblas::IMIN, imax=exblas::IMAX;
+        exblas::cpu::Normalize(&h_superacc[0], imin, imax);
+        if (myId == 0) {
+            MPI_Reduce (MPI_IN_PLACE, &h_superacc[0], exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Reduce (&h_superacc[0], NULL, exblas::BIN_COUNT, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        }
+        if (myId == 0) {
+            direct_err = exblas::cpu::Round( &h_superacc[0] );
+        }
+        MPI_Bcast(&direct_err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        // ReproAllReduce -- End
+
+        direct_err = sqrt(direct_err);
+#endif // DIRECT_ERROR
 
         alpha = beta / alpha;                                         		// alpha = beta / alpha
         dscal (&n_dist, &alpha, d, &IONE);                                // d = alpha * d
@@ -333,9 +395,10 @@ int main (int argc, char **argv) {
                 dimL, nodes, size_param, band_width, stencil_points, nnz_here);
         allocate_matrix(dimL, dim, nnz_here, &matL);
         generate_Poisson3D_filled(&matL, size_param, stencil_points, band_width, dspL, dimL, dim);
+
         // To generate ill-conditioned matrices
-//        double factor = 1.0e6;
-//        ScaleFirstRowCol(matL, dspL, dimL, myId, root, factor);
+        double factor = 1.0e6;
+        ScaleFirstRowCol(matL, dspL, dimL, myId, root, factor);
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
