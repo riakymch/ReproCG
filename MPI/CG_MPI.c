@@ -17,22 +17,25 @@
 #include <mpfr.h>
 
 double dot_mpfr(int *N, double *a, int *inca, double *b, int *incb) {
-    mpfr_t sum, dot, op;
-    mpfr_init2(op, 64);
-    mpfr_init2(dot, 128);
+    mpfr_t sum, dot, op1, op2;
+    mpfr_init2(op1, 64);
+    mpfr_init2(op2, 64);
+    mpfr_init2(dot, 192);
     mpfr_init2(sum, 2048);
 
     mpfr_set_zero(dot, 0.0);
     mpfr_set_zero(sum, 0.0);
 
     for (int i = 0; i < *N; i++) {
-        mpfr_set_d(op, a[i], MPFR_RNDN);
-        mpfr_mul_d(dot, op, b[i], MPFR_RNDN);
+        mpfr_set_d(op1, a[i], MPFR_RNDN);
+        mpfr_set_d(op2, b[i], MPFR_RNDN);
+        mpfr_mul(dot, op1, op2, MPFR_RNDN);
         mpfr_add(sum, sum, dot, MPFR_RNDN);
     }
     double dacc = mpfr_get_d(sum, MPFR_RNDN);
 
-    mpfr_clear(op);
+    mpfr_clear(op1);
+    mpfr_clear(op2);
     mpfr_clear(dot);
     mpfr_clear(sum);
     mpfr_free_cache();
@@ -272,7 +275,7 @@ int main (int argc, char **argv) {
                 dimL, nodes, size_param, band_width, stencil_points, nnz_here);
         allocate_matrix(dimL, dim, nnz_here, &matL);
         generate_Poisson3D_filled(&matL, size_param, stencil_points, band_width, dspL, dimL, dim);
-        // To generate ill-conditioned matrices
+//        // To generate ill-conditioned matrices
 //        double factor = 1.0e6;
 //        ScaleFirstRowCol(matL, dspL, dimL, myId, root, factor);
     }
