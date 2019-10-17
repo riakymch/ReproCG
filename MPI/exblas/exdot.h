@@ -29,12 +29,11 @@ namespace exblas{
 namespace cpu{
 
 template<typename CACHE, typename PointerOrValue1, typename PointerOrValue2>
-void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, double* fpe) {
+void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, int NBFPE, double* fpe) {
     // declare fpe for accumulating errors
-    double fperr[N];
-    for(int i = 0; i < N; i++) {
+    double fperr[NBFPE];
+    for( int i=0; i<NBFPE; i++)
         fperr[i] = 0.0;
-    }
     CACHE cache(fpe);
     CACHE cacherr(fperr);
 #ifndef _WITHOUT_VCL
@@ -65,7 +64,7 @@ void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, double* fpe) {
 #endif// _WITHOUT_VCL
 
     // merge fpe and fperr
-    for(int i = 0; i < N; i++) {
+    for(int i = 0; i < NBFPE; i++) {
         cache.Accumulate(fperr[i]);
     }
 }
@@ -83,16 +82,18 @@ void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, double* fpe) {
  * @param x2_ptr second array
  * @sa \c exblas::cpu::Round  to convert the superaccumulator into a double precision number
 */
-template<class PointerOrValue1, class PointerOrValue2, size_t NBFPE=3>
+template<class PointerOrValue1, class PointerOrValue2, size_t NBFPE=8>
 void exdot_cpu(unsigned size, PointerOrValue1 x1_ptr, PointerOrValue2 x2_ptr, double* fpe){
     static_assert( has_floating_value<PointerOrValue1>::value, "PointerOrValue1 needs to be T or T* with T one of (const) float or (const) double");
     static_assert( has_floating_value<PointerOrValue2>::value, "PointerOrValue2 needs to be T or T* with T one of (const) float or (const) double");
+
     for( int i=0; i<NBFPE; i++)
         fpe[i] = 0;
+
 #ifndef _WITHOUT_VCL
-    cpu::ExDOTFPE_cpu<cpu::FPExpansionVect<vcl::Vec8d, NBFPE, cpu::FPExpansionTraits<true> > >((int)size,x1_ptr,x2_ptr, fpe);
+    cpu::ExDOTFPE_cpu<cpu::FPExpansionVect<vcl::Vec8d, NBFPE, cpu::FPExpansionTraits<true> > >((int)size,x1_ptr,x2_ptr, NBFPE, fpe);
 #else
-    cpu::ExDOTFPE_cpu<cpu::FPExpansionVect<double, NBFPE, cpu::FPExpansionTraits<true> > >((int)size,x1_ptr,x2_ptr, fpe);
+    cpu::ExDOTFPE_cpu<cpu::FPExpansionVect<double, NBFPE, cpu::FPExpansionTraits<true> > >((int)size,x1_ptr,x2_ptr, NBFPE, fpe);
 #endif//_WITHOUT_VCL
 }
 
