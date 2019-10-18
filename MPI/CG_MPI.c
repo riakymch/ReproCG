@@ -12,6 +12,7 @@
 #include "SparseProduct.h"
 #include "ToolsMPI.h"
 #include "matrix.h"
+#include "common.h"
 
 // ================================================================================
 
@@ -69,7 +70,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 	iter = 0;
 	MPI_Allgatherv (x, sizeR, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
 	InitDoubles (z, sizeR, DZERO, DZERO);
-	ProdSparseMatrixVectorByRows_OMP (mat, 0, aux, z);            			// z = A * x
+	ProdSparseMatrixVectorByRows (mat, 0, aux, z);            			// z = A * x
 	dcopy (&n_dist, b, &IONE, res, &IONE);                          		// res = b
 	daxpy (&n_dist, &DMONE, z, &IONE, res, &IONE);                          // res -= z
 #ifdef PRECOND
@@ -94,7 +95,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 
     tol = sqrt (tol);
 #else
-    beta = ddot (&n_dist, res, &IONE, res, &IONE);                        // tol = res' * res
+    beta = ddot (&n_dist, res, &IONE, y, &IONE);                        // tol = res' * res
     MPI_Allreduce (MPI_IN_PLACE, &beta, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     tol = sqrt (beta);
@@ -105,9 +106,15 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     double direct_err;
 	dcopy (&n_dist, x_exact, &IONE, res_err, &IONE);                        // res_err = x_exact
 	daxpy (&n_dist, &DMONE, x, &IONE, res_err, &IONE);                      // res_err -= x
-    direct_err = ddot (&n_dist, res_err, &IONE, res_err, &IONE);            // direct_err = res_err' * res_err
-    MPI_Allreduce(MPI_IN_PLACE, &direct_err, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    direct_err = sqrt(direct_err);
+
+    // compute inf norm
+    direct_err = norm_inf(n_dist, res_err);
+    MPI_Allreduce(MPI_IN_PLACE, &direct_err, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+//    // compute euclidean norm
+//    direct_err = ddot (&n_dist, res_err, &IONE, res_err, &IONE);            // direct_err = res_err' * res_err
+//    MPI_Allreduce(MPI_IN_PLACE, &direct_err, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+//    direct_err = sqrt(direct_err);
 #endif // DIRECT_ERROR
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -117,11 +124,11 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 	while ((iter < maxiter) && (tol > umbral)) {
 		MPI_Allgatherv (d, sizeR, MPI_DOUBLE, aux, sizes, dspls, MPI_DOUBLE, MPI_COMM_WORLD);
 		InitDoubles (z, sizeR, DZERO, DZERO);
-		ProdSparseMatrixVectorByRows_OMP (mat, 0, aux, z);            		// z = A * d
+		ProdSparseMatrixVectorByRows (mat, 0, aux, z);            		// z = A * d
 
 		if (myId == 0) 
 #ifdef DIRECT_ERROR
-            printf ("%d \t %20.10e \t %20.10e \n", iter, tol, direct_err);
+            printf ("%d \t %a \t %a \n", iter, tol, direct_err);
 #else        
             printf ("%d \t %20.10e \n", iter, tol);
 #endif // DIRECT_ERROR
@@ -163,9 +170,15 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         // compute direct error
         dcopy (&n_dist, x_exact, &IONE, res_err, &IONE);                        // res_err = x_exact
         daxpy (&n_dist, &DMONE, x, &IONE, res_err, &IONE);                      // res_err -= x
-        direct_err = ddot (&n_dist, res_err, &IONE, res_err, &IONE);
-        MPI_Allreduce(MPI_IN_PLACE, &direct_err, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        direct_err = sqrt(direct_err);
+
+        // compute inf norm
+        direct_err = norm_inf(n_dist, res_err);
+        MPI_Allreduce(MPI_IN_PLACE, &direct_err, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+//        // compute euclidean norm
+//        direct_err = ddot (&n_dist, res_err, &IONE, res_err, &IONE);
+//        MPI_Allreduce(MPI_IN_PLACE, &direct_err, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+//        direct_err = sqrt(direct_err);
 #endif // DIRECT_ERROR
 
         alpha = beta / alpha;                                                   // alpha = beta / alpha
@@ -193,7 +206,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     if (myId == 0) {
         printf ("Size: %d \n", n);
         printf ("Iter: %d \n", iter);
-        printf ("Tol: %20.10e \n", tol);
+        printf ("Tol: %a \n", tol);
         printf ("Time_loop: %20.10e\n", (t3-t1));
         printf ("Time_iter: %20.10e\n", (t3-t1)/iter);
     }
@@ -324,7 +337,7 @@ int main (int argc, char **argv) {
 
     beta = sqrt(beta);
     if (myId == 0) 
-        printf ("Error: %10.5e\n", beta);
+        printf ("Error: %a\n", beta);
 
     /***************************************/
     // Freeing memory
