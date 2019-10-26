@@ -206,7 +206,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     direct_err = norm_inf(n_dist, res_err);
     MPI_Allreduce(MPI_IN_PLACE, &direct_err, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
-    // compute euclidean norm
+//    // compute euclidean norm
 //    exblas::cpu::exdot<double*, double*, NBFPE> (n_dist, res_err, res_err, &fpe[0]);            // direct_err = res_err' * res_err
 //
 //    // ReproAllReduce -- Begin
@@ -222,7 +222,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 //    MPI_Bcast(&direct_err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 //    // ReproAllReduce -- End
 //
-//    direct_err = exblas::cpu::Round<double, NBFPE> (&fpe[0]);
 //    direct_err = sqrt(direct_err);
 #endif // DIRECT_ERROR
 
@@ -331,7 +330,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         direct_err = norm_inf(n_dist, res_err);
         MPI_Allreduce(MPI_IN_PLACE, &direct_err, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
-        // compute euclidean norm
+//        // compute euclidean norm
 //        exblas::cpu::exdot<double*, double*, NBFPE> (n_dist, res_err, res_err, &fpe[0]);            // direct_err = res_err' * res_err
 //
 //        // ReproAllReduce -- Begin
@@ -347,7 +346,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 //        MPI_Bcast(&direct_err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 //        // ReproAllReduce -- End
 //
-//        direct_err = exblas::cpu::Round<double, NBFPE> (&fpe[0]);
 //        direct_err = sqrt(direct_err);
 #endif // DIRECT_ERROR
 
