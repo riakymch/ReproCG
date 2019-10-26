@@ -172,7 +172,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 //    MPI_Bcast(&direct_err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 //    // ReproAllReduce -- End
 //
-//    direct_err = exblas::cpu::Round( &h_superacc[0] );
 //    direct_err = sqrt(direct_err);
 #endif // DIRECT_ERROR
 
@@ -307,7 +306,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 //        MPI_Bcast(&direct_err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 //        // ReproAllReduce -- End
 //
-//        direct_err = exblas::cpu::Round( &h_superacc[0] );
 //        direct_err = sqrt(direct_err);
 #endif // DIRECT_ERROR
 
