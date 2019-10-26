@@ -18,6 +18,7 @@
 #pragma once
 #include "config.h"
 #include "mylibm.hpp"
+#include "nearsum.hpp"
 //this file has a direct correspondance to gpu code accumulate.cuh
 
 namespace exblas {
@@ -191,7 +192,6 @@ static inline bool Normalize( int64_t *accumulator, int& imin, int& imax) {
 // Rounding functions
 ////////////////////////////////////////////////////////////////////////////////
 
-
 /**
 * @brief Convert a superaccumulator to the nearest double precision number (CPU version)
 *
@@ -199,7 +199,7 @@ static inline bool Normalize( int64_t *accumulator, int& imin, int& imax) {
 * @param accumulator a pointer to at least \c BIN_COUNT 64 bit integers on the CPU (representing the superaccumulator)
 * @return the double precision number nearest to the superaccumulator
 */
-static inline double Round( int64_t * accumulator) {
+static inline double RoundStickyBit( int64_t * accumulator) {
     int imin = IMIN;
     int imax = IMAX;
     bool negative = Normalize(accumulator, imin, imax);
@@ -245,6 +245,118 @@ static inline double Round( int64_t * accumulator) {
     // Final rounding
     hi = hi + lo;
     return negative ? -hi : hi;
+}
+
+/**
+* @brief Convert a superaccumulator to the nearest double precision number (CPU version)
+*
+* @ingroup highlevel
+* @param accumulator a pointer to at least \c BIN_COUNT 64 bit integers on the CPU (representing the superaccumulator)
+* @return the double precision number nearest to the superaccumulator
+*/
+static inline double Round( int64_t * accumulator) {
+    int imin = IMIN;
+    int imax = IMAX;
+    bool negative = Normalize(accumulator, imin, imax);
+
+    int i,ii;
+    // Find leading word
+    if (negative) {
+        // Skip ones
+        for(; (accumulator[i] & ((1ll << DIGITS) - 1)) == ((1ll << DIGITS) - 1) && i >= imin; --i) {
+        }
+    } else {
+        // Skip zeroes
+        for(i = imax; accumulator[i] == 0 && i >= imin; --i) {
+        }
+    }
+    if (i < 0) {
+        return 0.0;
+    }
+    imax = i;
+
+    // find actual imin
+    if (negative) {
+        // Skip ones
+        for(ii = imin; (accumulator[ii] & ((1ll << DIGITS) - 1)) == ((1ll << DIGITS) - 1) && ii <= imin; ++ii) {
+        }
+    } else {
+        // Skip zeroes
+        for(ii = imin; accumulator[ii] == 0 && ii <= imax; ++ii) {
+        }
+    }
+    imin = ii;
+
+    // form array of doubles with all meaningful values of long accumulator
+    double arr[imax-imin+1];
+
+    // populate this array
+    int64_t hiword = negative ? ((1ll << DIGITS) - 1) - accumulator[i] : accumulator[i];
+    double rounded = (double)hiword;
+    double hi = ldexp(rounded, (i - F_WORDS) * DIGITS);
+    if (i == 0) {
+        hi = negative ? -hi : hi;  // Correct rounding achieved
+    }
+    int j = 0;
+    arr[j] = hi;
+
+    i--;
+    for(int ii = i; ii >= imin; --ii) {
+        ++j;
+        hiword = negative ? ((1ll << DIGITS) - 1) - accumulator[ii] : accumulator[ii];
+        rounded = (double)hiword;
+        hi = ldexp(rounded, (ii - F_WORDS) * DIGITS);
+        if (i == 0) {
+            hi = negative ? -hi : hi;  // Correct rounding achieved
+        }
+        arr[j] = hi;
+    }
+
+    return NearSum(imax-imin+1, &arr[0], 1);
+}
+
+static inline void PrintS( int64_t * accumulator) {
+    int imin = IMIN;
+    int imax = IMAX;
+    bool negative = Normalize(accumulator, imin, imax);
+
+    // Find leading word
+    int i;
+    // Skip zeroes
+    for(i = imax; accumulator[i] == 0 && i >= imin; --i) {
+    }
+    if (negative) {
+        // Skip ones
+        for(; (accumulator[i] & ((1ll << DIGITS) - 1)) == ((1ll << DIGITS) - 1) && i >= imin; --i) {
+        }
+    }
+    if (i < 0) {
+        printf("Superacc has no information\n");
+        return;
+    }
+
+    int64_t hiword = negative ? ((1ll << DIGITS) - 1) - accumulator[i] : accumulator[i];
+    double rounded = (double)hiword;
+    double hi = ldexp(rounded, (i - F_WORDS) * DIGITS);
+    if (i == 0) {
+        hi = negative ? -hi : hi;  // Correct rounding achieved
+    }
+    printf("%a\t", hi);
+
+    i--;
+    for(int ii = i; ii >= imin; --ii) {
+        hiword = negative ? ((1ll << DIGITS) - 1) - accumulator[ii] : accumulator[ii];
+        rounded = (double)hiword;
+        hi = ldexp(rounded, (ii - F_WORDS) * DIGITS);
+        if (i == 0) {
+            hi = negative ? -hi : hi;  // Correct rounding achieved
+        }
+        printf("%a\t", hi);
+    }
+
+    printf("\n");
+
+    return;
 }
 
 }//namespace cpu

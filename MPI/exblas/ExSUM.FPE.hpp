@@ -112,7 +112,7 @@ template<typename T>
 inline static T TwoProductFMA(T a, T b, T &d) {
     T p = a * b;
 #ifdef _WITHOUT_VCL
-    d = a*b-p;
+    d = fma(a,b,-p);
 #else
     d = vcl::mul_sub_x(a, b, p); //extra precision even if FMA is not available
 #endif//_WITHOUT_VCL
@@ -148,7 +148,7 @@ void FPExpansionVect<T,N,TRAITS>::Accumulate(T x)
     for(unsigned int i = 0; i != N; ++i) {
         a[i] = twosum(a[i], x, s);
         x = s;
-        if(TRAITS::EarlyExit && i != 0 && !horizontal_or(x)) return;
+        if(TRAITS::EarlyExit && !horizontal_or(x)) return;
     }
     if(TRAITS::EarlyExit || horizontal_or(x)) {
         FlushVector(x);
