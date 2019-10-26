@@ -29,7 +29,7 @@ namespace exblas{
 namespace cpu{
 
 template<typename CACHE, typename PointerOrValue1, typename PointerOrValue2>
-void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, int NBFPE, double* fpe) {
+void ExDOTFPE(int N, PointerOrValue1 a, PointerOrValue2 b, int NBFPE, double* fpe) {
     // declare fpe for accumulating errors
     double fperr[NBFPE];
     for( int i=0; i<NBFPE; i++)
@@ -68,8 +68,6 @@ void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, int NBFPE, double
         cache.Accumulate(fperr[i]);
     }
 }
-}//namespace cpu
-///@endcond
 
 /*!@brief serial version of exact dot product
  *
@@ -83,7 +81,7 @@ void ExDOTFPE_cpu(int N, PointerOrValue1 a, PointerOrValue2 b, int NBFPE, double
  * @sa \c exblas::cpu::Round  to convert the superaccumulator into a double precision number
 */
 template<class PointerOrValue1, class PointerOrValue2, size_t NBFPE=8>
-void exdot_cpu(unsigned size, PointerOrValue1 x1_ptr, PointerOrValue2 x2_ptr, double* fpe){
+void exdot(unsigned size, PointerOrValue1 x1_ptr, PointerOrValue2 x2_ptr, double* fpe){
     static_assert( has_floating_value<PointerOrValue1>::value, "PointerOrValue1 needs to be T or T* with T one of (const) float or (const) double");
     static_assert( has_floating_value<PointerOrValue2>::value, "PointerOrValue2 needs to be T or T* with T one of (const) float or (const) double");
 
@@ -91,11 +89,13 @@ void exdot_cpu(unsigned size, PointerOrValue1 x1_ptr, PointerOrValue2 x2_ptr, do
         fpe[i] = 0;
 
 #ifndef _WITHOUT_VCL
-    cpu::ExDOTFPE_cpu<cpu::FPExpansionVect<vcl::Vec8d, NBFPE, cpu::FPExpansionTraits<true> > >((int)size,x1_ptr,x2_ptr, NBFPE, fpe);
+    cpu::ExDOTFPE<cpu::FPExpansionVect<vcl::Vec8d, NBFPE, cpu::FPExpansionTraits<true> > >((int)size,x1_ptr,x2_ptr, NBFPE, fpe);
 #else
-    cpu::ExDOTFPE_cpu<cpu::FPExpansionVect<double, NBFPE, cpu::FPExpansionTraits<true> > >((int)size,x1_ptr,x2_ptr, NBFPE, fpe);
+    cpu::ExDOTFPE<cpu::FPExpansionVect<double, NBFPE, cpu::FPExpansionTraits<true> > >((int)size,x1_ptr,x2_ptr, NBFPE, fpe);
 #endif//_WITHOUT_VCL
 }
 
+}//namespace cpu
+///@endcond
 
 }//namespace exblas
