@@ -23,7 +23,7 @@
 #define DIRECT_ERROR 1
 #define PRECOND 1
 #define VECTOR_OUTPUT 0
-#define NBFPE 8
+#define NBFPE 3
 
 /* 
  * operation to reduce fpes 
@@ -167,8 +167,8 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         for (int i = 0; i < NBFPE; i++) { 
             fpe_tol[i] = fpe[NBFPE + i];
         }
-        vAux[0] = exblas::cpu::Round<double, NBFPE> (&fpe[0]);
-        vAux[1] = exblas::cpu::Round<double, NBFPE> (&fpe_tol[0]);
+        vAux[0] = exblas::cpu::Round<double> (&fpe[0]);
+        vAux[1] = exblas::cpu::Round<double> (&fpe_tol[0]);
     }
     MPI_Bcast(vAux, 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     beta = vAux[0];
@@ -188,7 +188,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     }
 
     if (myId == 0) {
-        beta = exblas::cpu::Round<double, NBFPE> (&fpe[0]);
+        beta = exblas::cpu::Round<double> (&fpe[0]);
     }
     MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // ReproAllReduce -- End
@@ -217,7 +217,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 //    }
 //
 //    if (myId == 0) {
-//        direct_err = exblas::cpu::Round<double, NBFPE> (&fpe[0]);
+//        direct_err = exblas::cpu::Round<double> (&fpe[0]);
 //    }
 //    MPI_Bcast(&direct_err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 //    // ReproAllReduce -- End
@@ -251,7 +251,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
             MPI_Reduce (&fpe[0], NULL, NBFPE, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
         }
         if (myId == 0) {
-            rho = exblas::cpu::Round<double, NBFPE> (&fpe[0]);
+            rho = exblas::cpu::Round<double> (&fpe[0]);
         }
         MPI_Bcast(&rho, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         // ReproAllReduce -- End
@@ -293,8 +293,8 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
             for (int i = 0; i < NBFPE; i++) { 
                 fpe_tol[i] = fpe[NBFPE + i];
             }
-            vAux[0] = exblas::cpu::Round<double, NBFPE> (&fpe[0]);
-            vAux[1] = exblas::cpu::Round<double, NBFPE> (&fpe_tol[0]);
+            vAux[0] = exblas::cpu::Round<double> (&fpe[0]);
+            vAux[1] = exblas::cpu::Round<double> (&fpe_tol[0]);
         }
         MPI_Bcast(vAux, 2, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         beta = vAux[0];
@@ -313,7 +313,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
             MPI_Reduce (&fpe[0], NULL, NBFPE, MPI_DOUBLE, Op, 0, MPI_COMM_WORLD);
         }
         if (myId == 0) {
-            beta = exblas::cpu::Round<double, NBFPE> (&fpe[0]);
+            beta = exblas::cpu::Round<double> (&fpe[0]);
         }
         MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         // ReproAllReduce -- End
@@ -341,7 +341,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 //        }
 //
 //        if (myId == 0) {
-//             direct_err = exblas::cpu::Round<double, NBFPE> (&fpe[0]);
+//             direct_err = exblas::cpu::Round<double> (&fpe[0]);
 //        }
 //        MPI_Bcast(&direct_err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 //        // ReproAllReduce -- End
@@ -522,7 +522,7 @@ int main (int argc, char **argv) {
     MPI_Op_free( &Op );
 
     if (myId == 0) {
-        beta = exblas::cpu::Round<double, NBFPE> (&fpe[0]);
+        beta = exblas::cpu::Round<double> (&fpe[0]);
     }
     MPI_Bcast(&beta, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // ReproAllReduce -- End

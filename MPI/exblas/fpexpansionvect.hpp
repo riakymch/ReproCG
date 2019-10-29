@@ -16,7 +16,6 @@
 #ifndef FPEXPANSIONVECT_HPP_INCLUDED
 #define FPEXPANSIONVECT_HPP_INCLUDED
 #include "accumulate.h"
-#include "nearsum.hpp"
 
 namespace exblas
 {
@@ -145,11 +144,6 @@ T FPExpansionVect<T,N,TRAITS>::twosum(T a, T b, T & s)
     //    return KnuthTwoSum(a, b, s);
     //}
 //#endif
-}
-
-template<typename T, int N>
-inline static T Round( T *fpe ) { 
-    return NearSum(N, fpe, 1);
 }
 
 /**
