@@ -89,7 +89,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
 #endif
 
     MPI_Comm_size(MPI_COMM_WORLD, &nProcs);
-    n = size; n_dist = sizeR; maxiter = 500; umbral = 1.0e-8;
+    n = size; n_dist = sizeR; maxiter = 16 * size; umbral = 1.0e-8;
     CreateDoubles (&res, n_dist); CreateDoubles (&z, n_dist); 
     CreateDoubles (&d, n_dist);  
 #ifdef DIRECT_ERROR
@@ -377,7 +377,6 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         printf ("Size: %d \n", n);
         printf ("Iter: %d \n", iter);
         printf ("Tol: %a \n", tol);
-        //printf ("Tol: %20.10e \n", tol);
         printf ("Time_loop: %20.10e\n", (t3-t1));
         printf ("Time_iter: %20.10e\n", (t3-t1)/iter);
     }
