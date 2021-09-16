@@ -259,15 +259,14 @@ static inline double Round( int64_t * accumulator) {
     int imax = IMAX;
     bool negative = Normalize(accumulator, imin, imax);
 
-    int i,ii;
     // Find leading word
+    // Skip zeroes
+    int i;
+    for(i = imax; accumulator[i] == 0 && i >= imin; --i) {
+    }
     if (negative) {
         // Skip ones
         for(; (accumulator[i] & ((1ll << DIGITS) - 1)) == ((1ll << DIGITS) - 1) && i >= imin; --i) {
-        }
-    } else {
-        // Skip zeroes
-        for(i = imax; accumulator[i] == 0 && i >= imin; --i) {
         }
     }
     if (i < 0) {
@@ -276,13 +275,13 @@ static inline double Round( int64_t * accumulator) {
     imax = i;
 
     // find actual imin
+    // Skip zeroes
+    int ii;
+    for(ii = imin; accumulator[ii] == 0 && ii <= imax; ++ii) {
+    }
     if (negative) {
         // Skip ones
-        for(ii = imin; (accumulator[ii] & ((1ll << DIGITS) - 1)) == ((1ll << DIGITS) - 1) && ii <= imin; ++ii) {
-        }
-    } else {
-        // Skip zeroes
-        for(ii = imin; accumulator[ii] == 0 && ii <= imax; ++ii) {
+        for(; (accumulator[ii] & ((1ll << DIGITS) - 1)) == ((1ll << DIGITS) - 1) && ii <= imax; ++ii) {
         }
     }
     imin = ii;
@@ -312,7 +311,8 @@ static inline double Round( int64_t * accumulator) {
         arr[j] = hi;
     }
 
-    return NearSum(imax-imin+1, &arr[0], 1);
+    hi = NearSum(imax-imin+1, &arr[0], 1);
+    return negative ? -hi : hi; 
 }
 
 static inline void PrintS( int64_t * accumulator) {
