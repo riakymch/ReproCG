@@ -48,7 +48,7 @@ double dot_mpfr(int *N, double *a, int *inca, double *b, int *incb) {
 
 // ================================================================================
 
-#define DIRECT_ERROR 1
+#define DIRECT_ERROR 0
 #define PRECOND 1
 #define VECTOR_OUTPUT 0
 
@@ -70,7 +70,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     n = size; n_dist = sizeR; maxiter = size; umbral = 1.0e-8;
     CreateDoubles (&res, n_dist); CreateDoubles (&z, n_dist); 
     CreateDoubles (&d, n_dist);  
-#ifdef DIRECT_ERROR
+#if DIRECT_ERROR
     // init exact solution
     double *res_err = NULL, *x_exact = NULL;
 	CreateDoubles (&x_exact, n_dist);
@@ -123,7 +123,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
     tol = sqrt (beta);
 #endif
 
-#ifdef DIRECT_ERROR
+#if DIRECT_ERROR
     // compute direct error
     double direct_err;
 	dcopy (&n_dist, x_exact, &IONE, res_err, &IONE);                        // res_err = x_exact
@@ -147,7 +147,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         ProdSparseMatrixVectorByRows (mat, 0, aux, z);            		// z = A * d
 
         if (myId == 0) 
-#ifdef DIRECT_ERROR
+#if DIRECT_ERROR
             printf ("%d \t %a \t %a \n", iter, tol, direct_err);
             //printf ("%d \t %20.10e \t %20.10e \n", iter, tol, direct_err);
 #else        
@@ -179,7 +179,7 @@ void ConjugateGradient (SparseMatrix mat, double *x, double *b, int *sizes, int 
         tol = sqrt (beta);
 #endif
 
-#ifdef DIRECT_ERROR
+#if DIRECT_ERROR
         // compute direct error
         dcopy (&n_dist, x_exact, &IONE, res_err, &IONE);                        // res_err = x_exact
         daxpy (&n_dist, &DMONE, x, &IONE, res_err, &IONE);                      // res_err -= x
