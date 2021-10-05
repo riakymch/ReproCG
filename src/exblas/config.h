@@ -57,6 +57,8 @@
 // Debug mode
 #define paranoid_assert(x) assert(x)
 // Making C code less readable in an attempt to make assembly more readable
+// TODO: this temporary fixes the issue with accumulation and VLC 
+#define _WITHOUT_VCL
 #if not defined _MSC_VER //there is no builtin_expect on msvc:
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)     __builtin_expect(!!(x), 0)
